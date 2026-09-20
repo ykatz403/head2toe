@@ -1,0 +1,739 @@
+<title>Head2Toe Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#EDEFF1; --surface:#F8F9FA; --stage:#E1E6EA; --ink:#12161B; --muted:#57626D; --line:#CFD5DA;
+  --accent:#0C7563; --accent-ink:#FFFFFF; --accent-soft:#D5EAE5; --warn:#9A5B00; --warn-soft:#F6E7CC;
+  --display:'Bricolage Grotesque','Helvetica Neue',Arial,sans-serif;
+  --body:'DM Sans','Helvetica Neue',Arial,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1215; --surface:#161B1F; --stage:#1C2329; --ink:#E7EBEE; --muted:#93A0AB; --line:#29323A;
+    --accent:#4FD1B0; --accent-ink:#06211B; --accent-soft:#16332E; --warn:#E8B45C; --warn-soft:#33290F;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1215; --surface:#161B1F; --stage:#1C2329; --ink:#E7EBEE; --muted:#93A0AB; --line:#29323A;
+  --accent:#4FD1B0; --accent-ink:#06211B; --accent-soft:#16332E; --warn:#E8B45C; --warn-soft:#33290F;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;padding-inline:16px}
+.wrap{max-width:1180px;margin-inline:auto}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.08;letter-spacing:-.02em}
+h1{font-size:clamp(2rem,5.2vw,3.6rem);font-weight:700;max-width:19ch}
+h2{font-size:clamp(1.5rem,3vw,2.1rem);font-weight:650}
+h3{font-size:1.1rem;font-weight:650;letter-spacing:-.01em}
+p{margin:0}
+a{color:var(--accent)}
+.mono{font-family:var(--mono)}
+.eyebrow{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between;padding-block:18px;border-bottom:1px solid var(--line)}
+.brand{font-family:var(--display);font-weight:750;font-size:1.25rem;letter-spacing:-.03em}
+.brand span{color:var(--accent)}
+.top nav{display:flex;gap:22px;flex-wrap:wrap;font-size:.9rem}
+.top nav a{color:var(--ink);text-decoration:none}
+.top nav a:hover{color:var(--accent)}
+.hero{padding-block:44px 26px;display:grid;gap:16px}
+.hero p{max-width:60ch;color:var(--muted);font-size:1.05rem}
+.badge{display:inline-block;font-family:var(--mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;padding:3px 8px;border:1px solid var(--line);border-radius:3px;color:var(--muted)}
+.badge.demo{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+
+/* studio */
+.toolbar{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:end;padding-block:14px 16px}
+.field{display:grid;gap:6px}
+.field>span{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;background:var(--surface);overflow:hidden}
+.seg button{font:inherit;font-size:.9rem;padding:8px 15px;border:0;background:none;color:var(--ink);cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn{font:inherit;font-size:.9rem;padding:8px 15px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.primary:hover{color:var(--accent-ink);filter:brightness(1.08)}
+.studio{display:grid;gap:18px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:980px){.studio{grid-template-columns:minmax(0,1fr) 400px}}
+.stage{position:relative;height:clamp(420px,64vw,640px);background:var(--stage);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:pan-y;outline-offset:-3px}
+.stage canvas:active{cursor:grabbing}
+.ruler{position:absolute;left:0;top:0;bottom:0;width:16px;pointer-events:none;color:var(--muted);opacity:.7;
+  background:repeating-linear-gradient(to bottom,currentColor 0 1px,transparent 1px 10px) left/8px 100% no-repeat,
+             repeating-linear-gradient(to bottom,currentColor 0 1px,transparent 1px 50px) left/16px 100% no-repeat}
+.stage .tag{position:absolute;left:30px;top:14px;display:flex;gap:8px;flex-wrap:wrap}
+.stage .views{position:absolute;right:12px;bottom:12px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.stage .views .btn{padding:5px 10px;font-size:.8rem;background:color-mix(in srgb,var(--surface) 88%,transparent)}
+.hint{position:absolute;left:30px;bottom:14px;font-family:var(--mono);font-size:.7rem;color:var(--muted)}
+.scanline{position:absolute;left:0;right:0;height:2px;background:var(--accent);box-shadow:0 0 22px 6px var(--accent);top:0;opacity:0;pointer-events:none}
+.stage.scanning .scanline{opacity:.9;animation:scan 2.2s ease-in-out}
+@keyframes scan{from{top:4%}to{top:96%}}
+@media (prefers-reduced-motion:reduce){.stage.scanning .scanline{animation:none;top:50%}}
+.webgl-fail{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:24px;color:var(--muted)}
+.body-row{display:flex;flex-wrap:wrap;gap:16px 32px;padding-top:14px;align-items:end}
+.slider{display:grid;gap:4px;min-width:160px;flex:1 1 160px;max-width:260px}
+.slider label{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);display:flex;justify-content:space-between}
+.slider label b{color:var(--ink);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.tones{display:flex;gap:8px}
+.tones button{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
+.tones button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column}
+.panel-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.panel-head h3{font-size:1.05rem}
+#outfit{list-style:none;margin:0;padding:0}
+#outfit li{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+#outfit li.off{opacity:.45}
+#outfit li.skip .sw{background:transparent;border-style:dashed}
+.sw{width:30px;height:30px;border-radius:4px;border:1px solid var(--line)}
+.slot{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.nm{font-weight:600;font-size:.92rem;line-height:1.25;overflow-wrap:anywhere}
+.br{color:var(--muted);font-size:.8rem}
+.right{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.price{font-family:var(--mono);font-size:.82rem;font-variant-numeric:tabular-nums}
+.acts{display:flex;gap:6px;align-items:center}
+.eye{width:26px;height:26px;padding:0;border:1px solid var(--line);border-radius:4px;background:none;color:var(--muted);cursor:pointer;font-size:.75rem;line-height:1}
+.eye[aria-pressed="false"]{background:var(--line);color:var(--ink)}
+.shop{font-size:.8rem;font-weight:600;text-decoration:none;border:1px solid var(--accent);border-radius:4px;padding:3px 9px}
+.shop:hover{background:var(--accent);color:var(--accent-ink)}
+.panel-foot{padding:14px 16px;display:grid;gap:8px}
+.total{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--display);font-size:1.3rem;font-weight:650}
+.total .mono{font-size:1.15rem}
+.fine{font-size:.78rem;color:var(--muted)}
+
+/* sections */
+section.block{padding-block:72px 8px}
+.block>header{display:grid;gap:10px;margin-bottom:28px}
+.block>header p{max-width:62ch;color:var(--muted)}
+.answers{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));border-top:1px solid var(--ink)}
+.answers>div{padding:20px 22px 22px 0;display:grid;gap:8px;align-content:start}
+.answers>div+div{padding-left:22px;border-left:1px solid var(--line)}
+@media (max-width:820px){.answers>div+div{padding-left:0;border-left:0;border-top:1px solid var(--line)}}
+.answers .q{font-family:var(--mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.answers .a{font-family:var(--display);font-size:1.5rem;font-weight:650;line-height:1.1;letter-spacing:-.02em}
+.answers p{color:var(--muted);font-size:.93rem}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);margin-top:34px}
+table{border-collapse:collapse;width:100%;min-width:860px;font-size:.88rem}
+th,td{text-align:left;vertical-align:top;padding:12px 14px;border-bottom:1px solid var(--line)}
+th{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.11em;color:var(--muted);font-weight:500}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;min-width:150px}
+.verdict{display:inline-block;font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;padding:3px 8px;border-radius:3px;white-space:nowrap}
+.v-lead{background:var(--accent);color:var(--accent-ink)}
+.v-add{background:var(--accent-soft);color:var(--accent)}
+.v-later{background:var(--line);color:var(--ink)}
+.v-avoid{background:var(--warn-soft);color:var(--warn)}
+.calc{display:grid;gap:26px;margin-top:40px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:900px){.calc{grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:44px}}
+.calc h3{margin-bottom:6px}
+.inputs{display:grid;gap:14px;margin-top:16px}
+.out{border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:20px;display:grid;gap:18px;align-content:start}
+.big{font-family:var(--display);font-size:clamp(2.2rem,5vw,3.3rem);font-weight:700;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.bars{display:grid;gap:12px}
+.bar{display:grid;grid-template-columns:110px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:.85rem}
+.bar .track{height:14px;background:var(--bg);border-radius:2px;overflow:hidden}
+.bar .fill{height:100%;background:var(--accent);width:0;transition:width .25s}
+.bar.ads .fill{background:var(--muted)}
+.bar.sub .fill{background:var(--ink)}
+.bar .v{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.callout{margin-top:26px;border:1px solid var(--accent);background:var(--accent-soft);border-radius:6px;padding:20px 22px;display:grid;gap:8px}
+.callout h3{color:var(--ink)}
+.callout ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.hard{display:grid;gap:0;border-top:1px solid var(--ink)}
+.hard>div{display:grid;gap:8px 32px;padding-block:22px;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr)}
+@media (min-width:860px){.hard>div{grid-template-columns:260px minmax(0,1fr)}}
+.hard p{color:var(--muted);max-width:70ch}
+.hard p b{color:var(--ink);font-weight:600}
+.road{list-style:none;margin:0;padding:0;display:grid;gap:0;border-top:1px solid var(--ink)}
+.road li{display:grid;gap:6px 32px;padding-block:20px;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr)}
+@media (min-width:860px){.road li{grid-template-columns:200px minmax(0,1fr) minmax(0,1fr)}}
+.road .when{font-family:var(--mono);font-size:.78rem;color:var(--accent)}
+.road .now{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;background:var(--accent);color:var(--accent-ink);padding:2px 6px;border-radius:3px;margin-left:6px}
+.road p{color:var(--muted);font-size:.92rem}
+.road strong{display:block;font-family:var(--display);font-size:1.05rem;font-weight:650;color:var(--ink);margin-bottom:2px}
+.modal{position:fixed;inset:0;z-index:50;background:rgba(8,12,15,.6);display:grid;place-items:center;padding:16px;overflow-y:auto}
+.modal[hidden]{display:none}
+.sheet{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;width:min(520px,100%);padding:20px 22px 22px;display:grid;gap:16px}
+.sheet-head{display:flex;justify-content:space-between;align-items:center}
+.sheet-head .btn{padding:3px 9px}
+.step{display:grid;gap:14px}
+.tips{margin:0;padding-left:18px;display:grid;gap:4px;color:var(--muted);font-size:.92rem}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.num{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);width:100%}
+.consent{display:flex;gap:10px;align-items:flex-start;font-size:.85rem;color:var(--muted)}
+.consent input{margin-top:4px;accent-color:var(--accent)}
+.actions{display:flex;gap:10px;justify-content:flex-end}
+.drop{display:grid;place-items:center;min-height:220px;border:1.5px dashed var(--line);border-radius:6px;background:var(--bg);cursor:pointer;overflow:hidden;color:var(--muted);text-align:center;padding:12px}
+.drop:hover,.drop:focus-within{border-color:var(--accent);color:var(--accent)}
+.drop img{max-height:280px;max-width:100%;border-radius:4px;display:block}
+.proc{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.proc li{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:.92rem}
+.proc li::before{content:"";width:14px;height:14px;border-radius:50%;border:2px solid var(--line);flex:none}
+.proc li.run{color:var(--ink)}
+.proc li.run::before{border-color:var(--accent);border-top-color:transparent;animation:spin .8s linear infinite}
+.proc li.done{color:var(--ink)}
+.proc li.done::before{background:var(--accent);border-color:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.proc li.run::before{animation:none}}
+footer{padding-block:56px 40px;margin-top:64px;border-top:1px solid var(--line);color:var(--muted);font-size:.82rem;display:grid;gap:6px;max-width:80ch}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div class="brand">Head2<span>Toe</span></div>
+    <nav aria-label="Sections">
+      <a href="#studio">Studio</a><a href="#money">How it earns</a><a href="#calc">Revenue model</a><a href="#build">What's hard</a><a href="#roadmap">Roadmap</a>
+    </nav>
+  </div>
+
+  <div class="hero">
+    <span class="badge demo" style="justify-self:start">Proof of concept · live demo</span>
+    <h1>See the whole outfit on your own body before you buy a thing.</h1>
+    <p>Answer two questions, get a head-to-toe look on a 3D model of you, and shop every piece, from Uniqlo to Gucci, from the side panel. Below the demo: how this makes money, with a model you can adjust.</p>
+  </div>
+
+  <!-- STUDIO -->
+  <section id="studio" aria-label="Outfit studio">
+    <div class="toolbar">
+      <div class="field"><span>1 · What's the occasion?</span>
+        <div class="seg" id="seg-season" role="group" aria-label="Season">
+          <button type="button" data-v="summer" aria-pressed="true">Summer</button>
+          <button type="button" data-v="winter" aria-pressed="false">Winter</button>
+          <button type="button" data-v="pool" aria-pressed="false">Pool day</button>
+        </div></div>
+      <div class="field"><span>2 · Where do you shop?</span>
+        <div class="seg" id="seg-tier" role="group" aria-label="Store level">
+          <button type="button" data-v="lux" aria-pressed="false">Designer</button>
+          <button type="button" data-v="std" aria-pressed="false">Everyday</button>
+          <button type="button" data-v="both" aria-pressed="true">Both</button>
+        </div></div>
+      <button class="btn primary" id="shuffle" type="button">Shuffle look</button>
+    </div>
+
+    <div class="studio">
+      <div>
+        <div class="stage" id="stage">
+          <canvas id="cv" tabindex="0" aria-label="3D model of you wearing the outfit. Drag or use the arrow keys to rotate."></canvas>
+          <div class="ruler" aria-hidden="true"></div>
+          <div class="tag"><span class="badge">Your scan</span><span class="badge demo">Stand-in avatar</span></div>
+          <div class="hint">drag to turn · arrows work too</div>
+          <div class="views">
+            <button class="btn" data-view="0" type="button">Front</button>
+            <button class="btn" data-view="1" type="button">Side</button>
+            <button class="btn" data-view="2" type="button">Back</button>
+            <button class="btn" id="zin" type="button" aria-label="Zoom in">+</button>
+            <button class="btn" id="zout" type="button" aria-label="Zoom out">−</button>
+          </div>
+          <div class="scanline" aria-hidden="true"></div>
+        </div>
+        <div class="body-row">
+          <div class="slider"><label for="height">Height <b id="hval">178 cm</b></label><input id="height" type="range" min="155" max="200" value="178"></div>
+          <div class="slider"><label for="build">Build <b id="bval">100%</b></label><input id="build" type="range" min="85" max="125" value="100"></div>
+          <div class="field"><span>Skin tone</span><div class="tones" id="tones" role="group" aria-label="Skin tone"></div></div>
+          <button class="btn primary" id="scan" type="button">Scan yourself</button>
+          <span class="badge" id="saved" hidden></span>
+          <button class="btn" id="delscan" type="button" hidden>Delete my scan</button>
+        </div>
+        <p class="fine" style="margin-top:10px">One scan at home, done once. The avatar is saved and loads every time you come back. In this demo the sliders stand in for the real measurements.</p>
+      </div>
+
+      <aside class="panel" aria-label="Shop this look">
+        <div class="panel-head"><h3>Shop this look</h3><span class="eyebrow" id="lookname">Summer · Both</span></div>
+        <ul id="outfit"></ul>
+        <div class="panel-foot">
+          <div class="total"><span>Full look</span><span class="mono" id="total">$0</span></div>
+          <p class="fine">Prices are illustrative. Demo links go to each brand's homepage; in production they become tracked affiliate deep links to the exact product.</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- MONEY -->
+  <section class="block" id="money">
+    <header>
+      <span class="eyebrow">Monetization</span>
+      <h2>Yes, it can earn. The money is in the click to buy, not the paywall.</h2>
+      <p>Your three questions, answered up front. Figures are typical industry ranges to sanity-check against real affiliate networks before you present them as forecasts.</p>
+    </header>
+    <div class="answers">
+      <div><span class="q">Will people pay a subscription?</span><span class="a">Some will, for extras, not for browsing.</span>
+        <p>Freemium apps usually convert a low single-digit share of active users. Keep the core studio free and charge about $4–8 a month for the 3D scan, a saved wardrobe and unlimited looks.</p></div>
+      <div><span class="q">Ads on the page?</span><span class="a">Possible, but they'd cost you the look.</span>
+        <p>Standard display ads pay roughly $2–10 per thousand views and make a premium page look like a coupon site. The classy version is a labelled "Sponsored" slot, where a brand pays to appear in shuffles.</p></div>
+      <div><span class="q">Money from people buying?</span><span class="a">That's the main engine.</span>
+        <p>Retail affiliate programs typically pay about 3–15% of each sale, and the user pays nothing extra. You already send buyers with intent. This is the strongest fit for the concept.</p></div>
+    </div>
+
+    <div class="tablewrap" role="region" aria-label="Revenue options compared" tabindex="0">
+      <table>
+        <thead><tr><th>Model</th><th>How it works here</th><th>Typical economics</th><th>Fits a classy look?</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td>Affiliate commissions</td><td>Every "Shop" button is a tracked link. You earn when the visitor buys, through networks like Awin, Rakuten, Impact or ShopStyle.</td><td>3–15% per sale. Luxury tends toward the low end. 7–30 day cookies.</td><td>Yes. Invisible to the user.</td><td><span class="verdict v-lead">Lead engine</span></td></tr>
+          <tr><td>Freemium "Plus" subscription</td><td>Free looks for everyone. Paid tier unlocks the body scan, saved wardrobe, occasion calendar and unlimited shuffles.</td><td>$4–8 per month. Low single-digit conversion of engaged users.</td><td>Yes, and it makes the product feel premium.</td><td><span class="verdict v-add">Add at MVP</span></td></tr>
+          <tr><td>Sponsored placements</td><td>Brands pay to be featured in Designer or Everyday shuffles, clearly tagged "Sponsored". Sold per month or per click.</td><td>Flat fees or cost per click. Needs real traffic before brands will pay.</td><td>Yes, if it looks like the rest of the page.</td><td><span class="verdict v-add">Add with traffic</span></td></tr>
+          <tr><td>Retailer widget (B2B)</td><td>License the "see it on you" 3D try-on to retailers for their own sites. They pay monthly or per order it influences.</td><td>Highest upside, longest sales cycle. Priced per store or per order.</td><td>Not applicable, it's their page.</td><td><span class="verdict v-later">Phase 3</span></td></tr>
+          <tr><td>Human stylist sessions</td><td>Marketplace where a stylist reviews your avatar's looks for a fee. You take a cut.</td><td>Commonly 20–30% platform take.</td><td>Yes.</td><td><span class="verdict v-later">Later</span></td></tr>
+          <tr><td>Trend data reports</td><td>Sell anonymized, aggregated "what people pick by season and budget" insight to brands.</td><td>Sold as subscription reports. Needs scale and clean consent.</td><td>Invisible to the user.</td><td><span class="verdict v-later">Later</span></td></tr>
+          <tr><td>Display ads</td><td>Ad networks (AdSense, Mediavine) fill banner slots around the studio.</td><td>About $2–10 per thousand page views.</td><td>No. Clutter next to a 3D model and a designer look.</td><td><span class="verdict v-avoid">Avoid</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="calc" id="calc">
+      <div>
+        <h3>Try your own numbers</h3>
+        <p class="fine">Placeholder assumptions to explore, not a forecast. Drag any slider.</p>
+        <div class="inputs">
+          <div class="slider" style="max-width:none"><label for="c-vis">Monthly visitors <b id="o-vis"></b></label><input id="c-vis" type="range" min="5000" max="500000" step="5000" value="50000"></div>
+          <div class="slider" style="max-width:none"><label for="c-ctr">Click through to a retailer <b id="o-ctr"></b></label><input id="c-ctr" type="range" min="5" max="60" step="1" value="25"></div>
+          <div class="slider" style="max-width:none"><label for="c-buy">Clicks that end in a purchase <b id="o-buy"></b></label><input id="c-buy" type="range" min="5" max="60" step="1" value="25"></div>
+          <div class="slider" style="max-width:none"><label for="c-aov">Average order <b id="o-aov"></b></label><input id="c-aov" type="range" min="30" max="400" step="5" value="95"></div>
+          <div class="slider" style="max-width:none"><label for="c-com">Commission rate <b id="o-com"></b></label><input id="c-com" type="range" min="2" max="15" step="0.5" value="8"></div>
+          <div class="slider" style="max-width:none"><label for="c-paid">Visitors who go Plus <b id="o-paid"></b></label><input id="c-paid" type="range" min="0" max="50" step="1" value="8"></div>
+          <div class="slider" style="max-width:none"><label for="c-price">Plus price per month <b id="o-price"></b></label><input id="c-price" type="range" min="3" max="15" step="0.5" value="6"></div>
+          <div class="slider" style="max-width:none"><label for="c-rpm">Display ads, per 1,000 views <b id="o-rpm"></b></label><input id="c-rpm" type="range" min="0" max="15" step="0.5" value="4"></div>
+        </div>
+      </div>
+      <div class="out" aria-live="polite">
+        <div><span class="eyebrow">Estimated monthly revenue</span><div class="big" id="r-total">$0</div>
+          <p class="fine" id="r-sub"></p></div>
+        <div class="bars">
+          <div class="bar"><span>Affiliate</span><div class="track"><div class="fill" id="b-aff"></div></div><span class="v" id="v-aff"></span></div>
+          <div class="bar sub"><span>Plus members</span><div class="track"><div class="fill" id="b-sub"></div></div><span class="v" id="v-sub"></span></div>
+          <div class="bar ads"><span>Display ads</span><div class="track"><div class="fill" id="b-ads"></div></div><span class="v" id="v-ads"></span></div>
+        </div>
+        <p class="fine" id="r-note"></p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <h3>Recommended model</h3>
+      <ul>
+        <li><b>Free studio, paid by affiliate links.</b> Launch with this. It costs the user nothing and proves demand.</li>
+        <li><b>Plus at about $6 a month</b> once people have saved looks worth keeping: 3D scan, wardrobe, unlimited shuffles, no sponsored slots.</li>
+        <li><b>Labelled sponsored placements</b> once traffic gives brands a reason to pay.</li>
+        <li><b>Retailer widget</b> as the scale play, selling the try-on to the stores you already link to.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- HARD PARTS -->
+  <section class="block" id="build">
+    <header>
+      <span class="eyebrow">Reality check</span>
+      <h2>Three things to settle before you build the real one.</h2>
+    </header>
+    <div class="hard">
+      <div><h3>Scraping brand photos is the weak link</h3>
+        <p><b>Copying retailer images breaks their terms and is a copyright risk</b>, and a flat product photo doesn't wrap onto a body convincingly anyway. Use affiliate product feeds instead, which include images you are licensed to promote. Then either use 3D garment models or an AI try-on model to place the item on the avatar. Many luxury houses don't run their own affiliate programs, so link to retailers that stock them (Farfetch, Mytheresa, SSENSE, Nordstrom) rather than the brand site.</p></div>
+      <div><h3>Getting the "you" in 3D</h3>
+        <p><b>Start with a guided phone capture</b> (a few photos or a short video) that produces an avatar, using an existing avatar or body-scan SDK rather than building one. That's what this demo stands in for with the height, build and skin-tone controls. Fit is the harder half: showing that a size medium actually fits you needs garment size data from the retailer.</p></div>
+      <div><h3>Body scans are sensitive data</h3>
+        <p><b>Treat scans as biometric data.</b> GDPR in Europe and laws like Illinois' BIPA in the US require explicit consent, clear deletion and careful storage. Doing this well is also a selling point: "your scan never leaves your device" is a feature people will pay for.</p></div>
+    </div>
+  </section>
+
+  <!-- ROADMAP -->
+  <section class="block" id="roadmap">
+    <header>
+      <span class="eyebrow">Roadmap</span>
+      <h2>From this demo to something people can pay for.</h2>
+    </header>
+    <ol class="road">
+      <li><div class="when">Now<span class="now">you are here</span></div><p><strong>Proof of concept</strong>3D model, season and budget questions, a curated catalog and outbound shop links.</p><p><strong>Proves</strong>The idea is understandable in ten seconds and feels worth shopping from.</p></li>
+      <li><div class="when">Weeks 1–12</div><p><strong>MVP</strong>Phone scan to avatar, 2–3 affiliate networks with live product feeds, saved looks, email sign-up.</p><p><strong>Proves</strong>Click-through and purchase rates. These two numbers drive everything in the calculator above.</p></li>
+      <li><div class="when">Months 4–8</div><p><strong>Plus tier and sponsors</strong>Wardrobe, calendar, unlimited looks, first paid brand placements.</p><p><strong>Proves</strong>People pay for the extras, and brands pay for the audience.</p></li>
+      <li><div class="when">Month 9+</div><p><strong>Retailer widget</strong>License the try-on to stores, add stylists and trend reports.</p><p><strong>Proves</strong>The technology is worth more than the traffic alone.</p></li>
+    </ol>
+  </section>
+
+  <footer>
+    <span>Head2Toe is a concept demo. Brand names appear only as examples of the retailers a finished version could link to, with no affiliation or endorsement. Prices, commission ranges and revenue figures are illustrative and should be verified with the affiliate networks before use.</span>
+  </footer>
+</div>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mt" hidden>
+  <div class="sheet">
+    <div class="sheet-head"><span class="eyebrow" id="mstep">Step 1 of 4</span><button class="btn" id="mclose" type="button" aria-label="Close scan">✕</button></div>
+
+    <div class="step" id="m1">
+      <h3 id="mt">Set up your one-time scan</h3>
+      <ul class="tips">
+        <li>Wear fitted clothes, or underwear if you're comfortable.</li>
+        <li>Stand about 2 m (6 ft) from your phone, propped up or held by a friend.</li>
+        <li>Plain wall behind you, good light, whole body in frame, feet included.</li>
+      </ul>
+      <div class="two">
+        <div class="slider" style="max-width:none"><label for="s-h">Height (cm)</label><input class="num" id="s-h" type="number" min="120" max="220" value="178" inputmode="numeric"></div>
+        <div class="slider" style="max-width:none"><label for="s-w">Weight (kg)</label><input class="num" id="s-w" type="number" min="35" max="200" value="75" inputmode="numeric"></div>
+      </div>
+      <label class="consent"><input type="checkbox" id="s-ok"> <span>I agree my photos are used once to build my avatar, then deleted. Only my measurements are saved, on this device.</span></label>
+      <div class="actions"><button class="btn primary" id="n1" type="button" disabled>Start</button></div>
+    </div>
+
+    <div class="step" id="m2" hidden>
+      <h3>Front photo</h3>
+      <p class="fine">Stand straight, arms slightly away from your sides, facing the camera.</p>
+      <label class="drop" for="p-front"><img id="pv-front" alt="Front photo preview" hidden><span id="pt-front">Take or choose a photo</span></label>
+      <input type="file" id="p-front" accept="image/*" hidden>
+      <div class="actions"><button class="btn" id="b2" type="button">Back</button><button class="btn primary" id="n2" type="button" disabled>Next</button></div>
+    </div>
+
+    <div class="step" id="m3" hidden>
+      <h3>Side photo</h3>
+      <p class="fine">Turn 90 degrees, arms relaxed at your sides, same distance from the camera.</p>
+      <label class="drop" for="p-side"><img id="pv-side" alt="Side photo preview" hidden><span id="pt-side">Take or choose a photo</span></label>
+      <input type="file" id="p-side" accept="image/*" hidden>
+      <div class="actions"><button class="btn" id="b3" type="button">Back</button><button class="btn primary" id="n3" type="button" disabled>Build my avatar</button></div>
+    </div>
+
+    <div class="step" id="m4" hidden>
+      <h3 id="m4t">Building your avatar</h3>
+      <ol class="proc" id="proc">
+        <li>Finding your body outline</li><li>Measuring shoulders, waist and hips</li><li>Building your 3D avatar</li><li>Deleting your photos</li>
+      </ol>
+      <p class="fine" id="m4note" hidden></p>
+      <div class="actions"><button class="btn primary" id="n4" type="button" hidden>See my avatar</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+
+/* ---------- catalog ---------- */
+const BR={
+ uniqlo:['Uniqlo','https://www.uniqlo.com'],zara:['Zara','https://www.zara.com'],cos:['COS','https://www.cos.com'],hm:['H&M','https://www.hm.com'],
+ rayban:['Ray-Ban','https://www.ray-ban.com'],persol:['Persol','https://www.persol.com'],gucci:['Gucci','https://www.gucci.com'],
+ ferragamo:['Ferragamo','https://www.ferragamo.com'],loro:['Loro Piana','https://www.loropiana.com'],cucinelli:['Brunello Cucinelli','https://www.brunellocucinelli.com'],
+ nike:['Nike','https://www.nike.com'],sunspel:['Sunspel','https://www.sunspel.com'],falke:['Falke','https://www.falke.com'],moncler:['Moncler','https://www.moncler.com'],
+ levis:["Levi's",'https://www.levi.com'],dr:['Dr. Martens','https://www.drmartens.com'],timberland:['Timberland','https://www.timberland.com'],
+ vilebrequin:['Vilebrequin','https://www.vilebrequin.com'],speedo:['Speedo','https://www.speedo.com'],birk:['Birkenstock','https://www.birkenstock.com'],prada:['Prada','https://www.prada.com']
+};
+const I=(b,name,price,color,tier,o)=>Object.assign({brand:BR[b][0],url:BR[b][1],name,price,color,tier},o||{});
+const SLOTS=[['hat','Hat'],['glasses','Glasses'],['under','Undershirt'],['top','Shirt'],['outer','Outer layer'],['pants','Pants'],['boxers','Underwear'],['socks','Socks'],['shoes','Shoes']];
+const CAT={
+summer:{
+ hat:[I('uniqlo','UV Protection Cap',19.9,'#d8d2c4','std',{shape:'cap'}),I('zara','Woven Straw Hat',29.9,'#cdb98a','std',{shape:'straw'}),I('loro','Linen Baseball Cap',520,'#8a9a8c','lux',{shape:'cap'}),I('cucinelli','Straw Fedora',640,'#c9b48a','lux',{shape:'straw'})],
+ glasses:[I('rayban','Wayfarer Classic',163,'#1a1a1a','std',{lens:'#20262b'}),I('zara','Metal Aviators',25.9,'#c9a24b','std',{lens:'#3a4a3a'}),I('persol','714 Folding Sunglasses',360,'#5a3a24','lux',{lens:'#2a2f33'}),I('gucci','Square Acetate Sunglasses',430,'#111','lux',{lens:'#151515'})],
+ under:[I('uniqlo','AIRism Cotton Crew Tee',14.9,'#f2f2f2','std',{sleeve:'short'}),I('sunspel','Riviera Cotton Tee',95,'#ffffff','lux',{sleeve:'short'})],
+ top:[I('uniqlo','Linen Short-Sleeve Shirt',39.9,'#9fc0d6','std',{sleeve:'short'}),I('zara','Camp Collar Shirt',45.9,'#e8e0cf','std',{sleeve:'short'}),I('cucinelli','Linen Leisure Shirt',495,'#b7c4d0','lux',{sleeve:'short'}),I('gucci','Silk Bowling Shirt',1400,'#2f5d50','lux',{sleeve:'short'})],
+ outer:null,
+ pants:[I('uniqlo','Linen-Blend Shorts',29.9,'#b5a58a','std',{len:'short'}),I('zara','Linen Trousers',49.9,'#d6cdb8','std',{len:'long'}),I('loro','Bermuda Shorts',690,'#cfc6b5','lux',{len:'short'}),I('cucinelli','Linen Trousers',790,'#c2b8a3','lux',{len:'long'})],
+ boxers:[I('uniqlo','AIRism Boxer Briefs',12.9,'#3b4a5a','std'),I('sunspel','Cotton Boxer',40,'#1f2a44','lux')],
+ socks:[I('uniqlo','No-Show Socks',7.9,'#f5f5f5','std',{sock:'low'}),I('falke','Cool Kick Sneaker Socks',22,'#e9e9e9','lux',{sock:'low'})],
+ shoes:[I('nike','Court Vision Sneaker',80,'#f2f2f2','std',{type:'sneaker'}),I('zara','Leather Loafers',79.9,'#6b4a32','std',{type:'loafer'}),I('ferragamo','Gancini Loafer',850,'#3a2a22','lux',{type:'loafer'}),I('gucci','Ace Sneaker',780,'#f4f4f0','lux',{type:'sneaker'})]
+},
+winter:{
+ hat:[I('uniqlo','HEATTECH Beanie',14.9,'#2b2f36','std',{shape:'beanie'}),I('zara','Wool Blend Beanie',25.9,'#5c4a3d','std',{shape:'beanie'}),I('loro','Cashmere Beanie',350,'#6d5d52','lux',{shape:'beanie'}),I('cucinelli','Cashmere Rib Beanie',420,'#3a3f4a','lux',{shape:'beanie'})],
+ glasses:null,
+ under:[I('uniqlo','HEATTECH Crew Neck',19.9,'#e8e8e8','std',{sleeve:'long'}),I('sunspel','Merino Base Layer',85,'#dcdcdc','lux',{sleeve:'long'})],
+ top:[I('uniqlo','Extra Fine Merino Sweater',39.9,'#43506b','std',{sleeve:'long'}),I('cos','Wool Knit Jumper',89,'#5c5f56','std',{sleeve:'long'}),I('cucinelli','Cashmere Crewneck',1295,'#8b6f5a','lux',{sleeve:'long'}),I('gucci','Wool Knit Sweater',1100,'#1f3b2d','lux',{sleeve:'long'})],
+ outer:[I('uniqlo','Ultra Light Down Jacket',89.9,'#1c2027','std',{coat:false}),I('zara','Wool Blend Coat',199,'#6b6f74','std',{coat:true}),I('moncler','Down Jacket',1500,'#1a1d24','lux',{coat:false}),I('loro','Storm System Coat',3800,'#3b4252','lux',{coat:true})],
+ pants:[I('uniqlo','Wool-Blend Trousers',49.9,'#2d3038','std',{len:'long'}),I('levis','501 Original Jeans',79.5,'#2a3f66','std',{len:'long'}),I('cucinelli','Flannel Trousers',750,'#55575c','lux',{len:'long'}),I('gucci','Wool Trousers',950,'#26282c','lux',{len:'long'})],
+ boxers:[I('uniqlo','HEATTECH Boxer Briefs',12.9,'#2f3742','std'),I('sunspel','Merino Boxer',55,'#2a2f3a','lux')],
+ socks:[I('uniqlo','HEATTECH Socks',9.9,'#444a52','std',{sock:'crew'}),I('falke','Wool Crew Socks',25,'#3c3f47','lux',{sock:'crew'})],
+ shoes:[I('dr','1460 Boot',170,'#1e1a18','std',{type:'boot'}),I('timberland','6-Inch Boot',198,'#b58a4a','std',{type:'boot'}),I('ferragamo','Leather Chelsea Boot',950,'#2b201b','lux',{type:'boot'}),I('gucci','Leather Ankle Boot',1200,'#16130f','lux',{type:'boot'})]
+},
+pool:{
+ hat:[I('zara','Straw Hat',29.9,'#cdb98a','std',{shape:'straw'}),I('hm','Bucket Hat',18,'#e6dfc8','std',{shape:'cap'}),I('loro','Summer Straw Hat',620,'#d1bf94','lux',{shape:'straw'}),I('prada','Re-Nylon Bucket Hat',690,'#101010','lux',{shape:'cap'})],
+ glasses:[I('rayban','Aviator Classic',163,'#c9a24b','std',{lens:'#2f3a2f'}),I('zara','Round Sunglasses',25.9,'#222','std',{lens:'#1a1a1a'}),I('persol','649 Sunglasses',340,'#7a4a24','lux',{lens:'#2a2f33'}),I('gucci','Round Sunglasses',450,'#8a5a2b','lux',{lens:'#3b2a1a'})],
+ under:null,
+ top:[I('uniqlo','Open-Collar Linen Shirt',34.9,'#f0f0f0','std',{sleeve:'short'}),I('zara','Resort Shirt',39.9,'#8fb8c9','std',{sleeve:'short'}),I('vilebrequin','Linen Beach Shirt',220,'#e4e9ee','lux',{sleeve:'short'}),I('gucci','Silk Resort Shirt',1100,'#2c6f7d','lux',{sleeve:'short'})],
+ outer:null,
+ pants:[I('speedo','Essential Watershorts',40,'#1c4f8a','std',{len:'short'}),I('hm','Swim Shorts',20,'#d05a4a','std',{len:'short'}),I('vilebrequin','Moorea Swim Trunks',245,'#e17b3d','lux',{len:'short'}),I('gucci','Swim Shorts',690,'#12503f','lux',{len:'short'})],
+ boxers:null,socks:null,
+ shoes:[I('birk','Arizona Sandal',110,'#b08a5a','std',{type:'slide'}),I('nike','Victori One Slide',30,'#111','std',{type:'slide'}),I('gucci','Rubber Slide',590,'#1d1d1d','lux',{type:'slide'}),I('prada','Foam Slide',550,'#d5d0c4','lux',{type:'slide'})]
+}};
+const NOTE={summer:{outer:'Not needed in the heat'},winter:{glasses:'Optional in winter, skipped'},pool:{under:'Skipped for the pool',outer:'Skipped for the pool',boxers:'Swim shorts have a liner',socks:'Bare feet by the pool'}};
+
+/* ---------- state ---------- */
+const state={season:'summer',tier:'both',seed:0,hidden:{},look:{},height:178,build:100,skin:0};
+const TONES=['#f1d2b8','#e3b48c','#c68b60','#8f5b3a','#5a3826'];
+function pick(slot,si){
+  let arr=CAT[state.season][slot]; if(!arr)return null;
+  if(state.tier!=='both')arr=arr.filter(x=>x.tier===state.tier);
+  else{const l=arr.filter(x=>x.tier==='lux'),s=arr.filter(x=>x.tier==='std');arr=[];for(let i=0;i<Math.max(l.length,s.length);i++){if(s[i])arr.push(s[i]);if(l[i])arr.push(l[i]);}}
+  return arr.length?arr[(state.seed+si)%arr.length]:null;
+}
+function buildLook(){SLOTS.forEach(([s],i)=>{state.look[s]=pick(s,i)});}
+const money=n=>'$'+(n%1?n.toFixed(2):n.toLocaleString('en-US'));
+
+/* ---------- 3D ---------- */
+const cv=$('#cv'),stage=$('#stage');
+let renderer,scene,camera,root,model,ok=true;
+const mat={};const V={},ALL={};
+let ang=0.5,target=0.5,auto=!matchMedia('(prefers-reduced-motion:reduce)').matches,dist=4.3;
+function reg(slot,keys,m){(ALL[slot]=ALL[slot]||[]).push(m);[].concat(keys).forEach(k=>{((V[slot]=V[slot]||{})[k]=V[slot][k]||[]).push(m)});m.visible=false;return m}
+const mesh=(g,m,x,y,z,p)=>{const o=new THREE.Mesh(g,m);o.position.set(x||0,y||0,z||0);if(p)p.add(o);return o};
+const cyl=(a,b,h,s)=>new THREE.CylinderGeometry(a,b,h,s||28);
+const box=(w,h,d)=>new THREE.BoxGeometry(w,h,d);
+const sph=(r,ws,hs,ps,pl,ts,tl)=>new THREE.SphereGeometry(r,ws||24,hs||16,ps,pl,ts,tl);
+const M=(c,r)=>new THREE.MeshStandardMaterial({color:c,roughness:r==null?.85:r,metalness:0});
+
+function init3d(){
+  try{
+    renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+  }catch(e){ok=false;stage.insertAdjacentHTML('beforeend','<div class="webgl-fail">3D isn\'t available in this browser. The outfit list still works.</div>');return}
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(30,1,.1,50);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x8a97a3,.95));
+  const d1=new THREE.DirectionalLight(0xffffff,1.15);d1.position.set(2,4,3);scene.add(d1);
+  const d2=new THREE.DirectionalLight(0xffffff,.45);d2.position.set(-3,2,-2.5);scene.add(d2);
+  root=new THREE.Group();scene.add(root);
+  model=new THREE.Group();root.add(model);
+
+  ['skin','hair','under','top','outer','pants','boxers','socks','shoes','sole','hat','frame'].forEach(k=>mat[k]=M('#888'));
+  mat.lens=new THREE.MeshStandardMaterial({color:'#111',roughness:.2,transparent:true,opacity:.78});
+  mat.eye=M('#1a1a1a',.4);mat.hair.color.set('#2a2521');
+
+  // ground shadow blob + ring
+  const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d');
+  const gr=g.createRadialGradient(64,64,4,64,64,62);gr.addColorStop(0,'rgba(0,0,0,.35)');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,128,128);
+  const sh=mesh(new THREE.CircleGeometry(.62,40),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false}),0,.002,0);sh.rotation.x=-Math.PI/2;root.add(sh);
+  const acc=(getComputedStyle(document.documentElement).getPropertyValue('--accent')||'#0C7563').trim();
+  const ring=mesh(new THREE.RingGeometry(.58,.6,64),new THREE.MeshBasicMaterial({color:acc,transparent:true,opacity:.55}),0,.004,0);ring.rotation.x=-Math.PI/2;root.add(ring);
+
+  const S=mat.skin;
+  // body
+  const torso=mesh(cyl(.19,.15,.6),S,0,1.22,0,model);torso.scale.z=.64;
+  const pelvis=mesh(cyl(.155,.15,.2),S,0,.93,0,model);pelvis.scale.z=.64;
+  mesh(cyl(.05,.055,.16),S,0,1.56,0,model);
+  const head=mesh(sph(.11,32,20),S,0,1.68,0,model);head.scale.y=1.12;
+  const nose=mesh(sph(.014,12,10),S,0,1.665,.112,model);nose.scale.z=1.5;
+  [-1,1].forEach(s=>mesh(sph(.008,10,8),mat.eye,s*.04,1.685,.1,model));
+  const hair=mesh(sph(.113,28,16,0,Math.PI*2,0,Math.PI*.42),mat.hair,0,1.685,-.012,model);hair.scale.y=1.12;
+  const arm={};
+  [-1,1].forEach(s=>{
+    const p=new THREE.Group();p.position.set(s*.235,1.46,0);p.rotation.z=s*.07;model.add(p);arm[s]=p;
+    mesh(cyl(.05,.038,.6),S,0,-.3,0,p);mesh(sph(.04,14,10),S,0,-.64,0,p);
+    // sleeves
+    reg('under','short',mesh(cyl(.058,.056,.2),mat.under,0,-.09,0,p));
+    reg('under','long',mesh(cyl(.058,.047,.6),mat.under,0,-.3,0,p));
+    reg('top','short',mesh(cyl(.068,.066,.25),mat.top,0,-.11,0,p));
+    reg('top','long',mesh(cyl(.068,.056,.6),mat.top,0,-.3,0,p));
+    reg('outer',['jacket','coat'],mesh(cyl(.08,.07,.6),mat.outer,0,-.3,0,p));
+    // legs + feet
+    const x=s*.085;
+    mesh(cyl(.078,.052,.86),S,x,.5,0,model);
+    const foot=mesh(sph(.05,14,10),S,x,.04,.05,model);foot.scale.set(1,.7,2.3);
+    reg('pants','long',mesh(cyl(.095,.068,.79),mat.pants,x,.535,0,model));
+    reg('pants','short',mesh(cyl(.095,.088,.4),mat.pants,x,.73,0,model));
+    reg('boxers','all',mesh(cyl(.088,.086,.16),mat.boxers,x,.84,0,model));
+    reg('socks','low',mesh(cyl(.06,.058,.09),mat.socks,x,.1,0,model));
+    reg('socks','crew',mesh(cyl(.066,.06,.32),mat.socks,x,.21,0,model));
+    // shoes
+    const up=(sy,sz)=>{const u=mesh(sph(.058,20,14),mat.shoes,x,.06,.05,model);u.scale.set(1,sy,sz);return u};
+    reg('shoes','sneaker',up(.9,2.2));reg('shoes','loafer',up(.75,2.15));reg('shoes','boot',up(.95,2.1));
+    reg('shoes','boot',mesh(cyl(.072,.076,.22),mat.shoes,x,.17,-.005,model));
+    reg('shoes',['sneaker','loafer','boot','slide'],mesh(box(.11,.028,.27),mat.sole,x,.014,.06,model));
+    reg('shoes','slide',mesh(box(.105,.02,.09),mat.shoes,x,.045,.05,model));
+    // glasses parts
+    reg('glasses','all',mesh(new THREE.TorusGeometry(.03,.004,8,26),mat.frame,s*.05,1.677,.105,model));
+    reg('glasses','all',mesh(new THREE.CircleGeometry(.029,26),mat.lens,s*.05,1.677,.105,model));
+    const tp=reg('glasses','all',mesh(box(.004,.004,.11),mat.frame,s*.109,1.677,.05,model));tp.rotation.y=s*.12;
+  });
+  reg('glasses','all',mesh(box(.03,.004,.004),mat.frame,0,1.682,.108,model));
+  // torso garments (offset heights avoid coplanar lids)
+  const tg=(slot,keys,m,rt,rb,h,y)=>{const o=reg(slot,keys,mesh(cyl(rt,rb,h),m,0,y,0,model));o.scale.z=.64;return o};
+  tg('under',['short','long'],mat.under,.196,.156,.6,1.215);
+  tg('top',['short','long'],mat.top,.203,.16,.6,1.225);
+  tg('outer','jacket',mat.outer,.216,.19,.64,1.19);
+  tg('outer','coat',mat.outer,.218,.205,.98,1.03);
+  tg('pants',['short','long'],mat.pants,.163,.158,.22,.93);
+  tg('boxers','all',mat.boxers,.16,.155,.16,.9);
+  // hats
+  const dome=(r,tl,y,m)=>mesh(sph(r,30,16,0,Math.PI*2,0,tl),m,0,y,0,model);
+  reg('hat','cap',dome(.125,Math.PI*.52,1.72,mat.hat)).scale.y=1.05;
+  const brim=reg('hat','cap',mesh(box(.15,.008,.11),mat.hat,0,1.735,.135,model));brim.rotation.x=.12;
+  reg('hat','beanie',dome(.13,Math.PI*.5,1.73,mat.hat)).scale.y=1.05;
+  reg('hat','beanie',mesh(cyl(.133,.133,.05,30),mat.hat,0,1.745,0,model));
+  reg('hat','straw',dome(.12,Math.PI*.5,1.72,mat.hat)).scale.y=1.05;
+  reg('hat','straw',mesh(cyl(.245,.245,.008,40),mat.hat,0,1.725,0,model));
+  reg('hat','straw',mesh(cyl(.122,.122,.022,30),mat.sole,0,1.735,0,model));
+  fit();new ResizeObserver(fit).observe(stage);
+  applyBody();applyLook();
+  requestAnimationFrame(loop);
+}
+function fit(){if(!renderer)return;const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;
+  // keep the whole body in frame on narrow stages
+  camera.fov=w/h<.85?38:30;camera.updateProjectionMatrix()}
+function loop(){
+  if(auto){ang+=.006;target=ang}else ang+=(target-ang)*.14;
+  root.rotation.y=ang;
+  camera.position.set(0,1.0,dist);camera.lookAt(0,.93,0);
+  renderer.render(scene,camera);
+  requestAnimationFrame(loop);
+}
+function applyBody(){
+  if(!ok)return;
+  const b=state.build/100,h=state.height/178;
+  model.scale.set(b,h,b);
+  mat.skin.color.set(TONES[state.skin]);
+}
+function applyLook(){
+  if(!ok)return;
+  const K={hat:i=>i.shape,glasses:()=>'all',under:i=>i.sleeve,top:i=>i.sleeve,outer:i=>i.coat?'coat':'jacket',pants:i=>i.len,boxers:()=>'all',socks:i=>i.sock,shoes:i=>i.type};
+  SLOTS.forEach(([s])=>{
+    ALL[s].forEach(m=>m.visible=false);
+    const it=state.look[s];if(!it||state.hidden[s])return;
+    (V[s][K[s](it)]||[]).forEach(m=>m.visible=true);
+    if(s==='glasses'){mat.frame.color.set(it.color);mat.lens.color.set(it.lens||'#111')}
+    else if(s==='shoes'){mat.shoes.color.set(it.color);mat.sole.color.set(it.type==='sneaker'?'#ececec':new THREE.Color(it.color).multiplyScalar(.5))}
+    else if(s==='hat'){mat.hat.color.set(it.color);mat.sole.color.set(new THREE.Color(it.color).multiplyScalar(.55))}
+    else mat[s].color.set(it.color);
+  });
+  // don't let the straw hat band overwrite sole colour used by shoes: reapply shoe sole last
+  const sh=state.look.shoes;if(sh&&!state.hidden.shoes)mat.sole.color.set(sh.type==='sneaker'?'#ececec':new THREE.Color(sh.color).multiplyScalar(.5));
+}
+
+/* ---------- panel ---------- */
+function renderPanel(){
+  const ul=$('#outfit');ul.innerHTML='';let total=0;
+  SLOTS.forEach(([s,label])=>{
+    const it=state.look[s],li=document.createElement('li');
+    if(!it){
+      li.className='skip';
+      li.innerHTML='<span class="sw"></span><div><div class="slot"></div><div class="br"></div></div><span></span>';
+      li.querySelector('.slot').textContent=label;
+      li.querySelector('.br').textContent=(NOTE[state.season]||{})[s]||'Not part of this look';
+    }else{
+      const off=state.hidden[s];if(off)li.className='off';else total+=it.price;
+      li.innerHTML='<span class="sw"></span><div><div class="slot"></div><div class="nm"></div><div class="br"></div></div><div class="right"><span class="price"></span><div class="acts"><button class="eye" type="button"></button><a class="shop" target="_blank" rel="noopener sponsored">Shop ↗</a></div></div>';
+      li.querySelector('.sw').style.background=it.color;
+      li.querySelector('.slot').textContent=label;
+      li.querySelector('.nm').textContent=it.name;
+      li.querySelector('.br').textContent=it.brand+' · '+(it.tier==='lux'?'Designer':'Everyday');
+      li.querySelector('.price').textContent=money(it.price);
+      const a=li.querySelector('.shop');a.href=it.url;a.setAttribute('aria-label','Shop '+it.name+' at '+it.brand);
+      const e=li.querySelector('.eye');e.textContent=off?'○':'●';e.setAttribute('aria-pressed',String(!off));e.setAttribute('aria-label',(off?'Show ':'Hide ')+label+' on the model');e.title=off?'Show on model':'Hide on model';
+      e.onclick=()=>{state.hidden[s]=!state.hidden[s];renderPanel();applyLook()};
+    }
+    ul.appendChild(li);
+  });
+  $('#total').textContent=money(Math.round(total));
+  const sn={summer:'Summer',winter:'Winter',pool:'Pool day'}[state.season],tn={lux:'Designer',std:'Everyday',both:'Designer + Everyday'}[state.tier];
+  $('#lookname').textContent=sn+' · '+tn;
+}
+function refresh(){buildLook();renderPanel();applyLook()}
+function seg(id,key){
+  $$(id+' button').forEach(b=>b.onclick=()=>{
+    $$(id+' button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+    state[key]=b.dataset.v;state.hidden={};refresh();
+  });
+}
+seg('#seg-season','season');seg('#seg-tier','tier');
+$('#shuffle').onclick=()=>{state.seed++;state.hidden={};refresh()};
+
+// body controls
+TONES.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.style.background=c;b.setAttribute('aria-label','Skin tone '+(i+1));b.setAttribute('aria-pressed',String(i===state.skin));
+  b.onclick=()=>{state.skin=i;$$('#tones button').forEach((x,j)=>x.setAttribute('aria-pressed',String(j===i)));applyBody()};$('#tones').appendChild(b)});
+function syncBody(){$('#hval').textContent=state.height+' cm';$('#bval').textContent=state.build+'%';$('#height').value=state.height;$('#build').value=state.build}
+$('#height').oninput=e=>{state.height=+e.target.value;syncBody();applyBody()};
+$('#build').oninput=e=>{state.build=+e.target.value;syncBody();applyBody()};
+/* ---------- one-time scan flow ---------- */
+const KEY='h2t-scan';
+const store={get(){try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null}},set(v){try{localStorage.setItem(KEY,JSON.stringify(v))}catch(e){}},del(){try{localStorage.removeItem(KEY)}catch(e){}}};
+const modal=$('#modal'),urls={};
+function showSaved(p){
+  $('#saved').hidden=!p;$('#delscan').hidden=!p;
+  if(p)$('#saved').textContent='Your scan · saved '+p.date;
+  $('#scan').textContent=p?'Re-scan':'Scan yourself';
+}
+function step(n){
+  [1,2,3,4].forEach(i=>$('#m'+i).hidden=i!==n);
+  $('#mstep').textContent='Step '+n+' of 4';
+  const f={1:'#s-h',2:'#p-front',3:'#p-side'}[n];
+  if(f&&n===1)$(f).focus();
+}
+function clearPhotos(){
+  ['front','side'].forEach(k=>{if(urls[k]){URL.revokeObjectURL(urls[k]);urls[k]=null}
+    $('#p-'+k).value='';$('#pv-'+k).hidden=true;$('#pv-'+k).removeAttribute('src');$('#pt-'+k).hidden=false;});
+  $('#n2').disabled=true;$('#n3').disabled=true;
+}
+function openModal(){clearPhotos();$('#s-ok').checked=false;$('#n1').disabled=true;step(1);modal.hidden=false;$('#s-h').value=state.height}
+function closeModal(){modal.hidden=true;clearPhotos();$('#scan').focus()}
+$('#scan').onclick=openModal;
+$('#mclose').onclick=closeModal;
+modal.addEventListener('pointerdown',e=>{if(e.target===modal)closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!modal.hidden)closeModal()});
+$('#s-ok').onchange=e=>{$('#n1').disabled=!e.target.checked};
+$('#n1').onclick=()=>{const h=+$('#s-h').value,w=+$('#s-w').value;
+  if(!(h>=120&&h<=220)){$('#s-h').focus();return}
+  if(!(w>=35&&w<=200)){$('#s-w').focus();return}
+  step(2)};
+['front','side'].forEach(k=>{
+  $('#p-'+k).onchange=e=>{const f=e.target.files[0];if(!f)return;
+    if(urls[k])URL.revokeObjectURL(urls[k]);urls[k]=URL.createObjectURL(f);
+    const im=$('#pv-'+k);im.src=urls[k];im.hidden=false;$('#pt-'+k).hidden=true;
+    $(k==='front'?'#n2':'#n3').disabled=false};
+});
+$('#b2').onclick=()=>step(1);$('#b3').onclick=()=>step(2);
+$('#n2').onclick=()=>step(3);
+$('#n3').onclick=()=>{
+  step(4);
+  const items=$$('#proc li');items.forEach(li=>li.className='');$('#m4t').textContent='Building your avatar';
+  $('#n4').hidden=true;$('#m4note').hidden=true;
+  const delay=matchMedia('(prefers-reduced-motion:reduce)').matches?200:900;
+  items.forEach((li,i)=>{
+    setTimeout(()=>{if(i)items[i-1].className='done';li.className='run';
+      if(i===items.length-1)clearPhotos()},i*delay);
+  });
+  setTimeout(()=>{
+    items[items.length-1].className='done';
+    const h=+$('#s-h').value,w=+$('#s-w').value,bmi=w/Math.pow(h/100,2);
+    const b=Math.max(85,Math.min(125,Math.round(100+(bmi-23)*3.2)));
+    state.height=h;state.build=b;syncBody();applyBody();
+    const d=new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    store.set({height:h,build:b,skin:state.skin,date:d});showSaved({date:d});
+    $('#m4t').textContent='Your avatar is ready';
+    $('#m4note').textContent='Photos deleted. Saved on this device: height '+h+' cm and a build value of '+b+'%. Demo note: this prototype estimates build from height and weight. The finished product measures it from the photos.';
+    $('#m4note').hidden=false;$('#n4').hidden=false;$('#n4').focus();
+  },items.length*delay);
+};
+$('#n4').onclick=closeModal;
+$('#delscan').onclick=()=>{store.del();showSaved(null);state.height=178;state.build=100;syncBody();applyBody()};
+(function restore(){const p=store.get();if(p&&p.height){state.height=p.height;state.build=p.build;state.skin=p.skin||0;
+  $$('#tones button').forEach((x,j)=>x.setAttribute('aria-pressed',String(j===state.skin)));showSaved(p)}})();
+
+// camera controls
+let drag=null;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX};auto=false;cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!drag)return;target+=(e.clientX-drag.x)*.012;ang=target;drag.x=e.clientX});
+['pointerup','pointercancel'].forEach(t=>cv.addEventListener(t,()=>{drag=null}));
+cv.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){auto=false;target-=.25;e.preventDefault()}if(e.key==='ArrowRight'){auto=false;target+=.25;e.preventDefault()}});
+$$('[data-view]').forEach(b=>b.onclick=()=>{auto=false;const t=[0,Math.PI/2,Math.PI][+b.dataset.view];target=Math.round(ang/(Math.PI*2))*Math.PI*2+t});
+$('#zin').onclick=()=>{dist=Math.max(2.8,dist-.4)};$('#zout').onclick=()=>{dist=Math.min(6.5,dist+.4)};
+
+/* ---------- revenue calculator ---------- */
+const cf=n=>'$'+Math.round(n).toLocaleString('en-US');
+function calc(){
+  const g=id=>+$('#'+id).value;
+  const vis=g('c-vis'),ctr=g('c-ctr')/100,buy=g('c-buy')/100,aov=g('c-aov'),com=g('c-com')/100,paid=g('c-paid')/1000*1,price=g('c-price'),rpm=g('c-rpm');
+  $('#o-vis').textContent=vis.toLocaleString('en-US');$('#o-ctr').textContent=(ctr*100).toFixed(0)+'%';
+  $('#o-buy').textContent=(buy*100).toFixed(0)+'%';$('#o-aov').textContent=cf(aov);$('#o-com').textContent=(com*100).toFixed(1)+'%';
+  $('#o-paid').textContent=(g('c-paid')/10).toFixed(1)+'%';$('#o-price').textContent='$'+price.toFixed(2);$('#o-rpm').textContent='$'+rpm.toFixed(1);
+  const orders=vis*ctr*buy,aff=orders*aov*com;
+  const members=vis*(g('c-paid')/1000),sub=members*price;
+  const ads=vis*3/1000*rpm;
+  const total=aff+sub+ads,mx=Math.max(aff,sub,ads,1);
+  $('#r-total').textContent=cf(total);
+  $('#r-sub').textContent=cf(total*12)+' a year · about '+(vis?(total/vis).toFixed(2):'0.00')+' per visitor';
+  [['aff',aff],['sub',sub],['ads',ads]].forEach(([k,v])=>{$('#b-'+k).style.width=(v/mx*100)+'%';$('#v-'+k).textContent=cf(v)});
+  $('#v-sub').title=Math.round(members).toLocaleString('en-US')+' paying members';
+  $('#r-note').textContent=Math.round(orders).toLocaleString('en-US')+' purchases and '+Math.round(members).toLocaleString('en-US')+' paying members a month. Display ads assume 3 page views per visitor. Setting ads to $0 shows the ad-free version.';
+}
+$$('.inputs input').forEach(i=>i.addEventListener('input',calc));
+
+buildLook();renderPanel();syncBody();calc();
+init3d();
+})();
+</script>

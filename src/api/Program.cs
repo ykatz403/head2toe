@@ -38,7 +38,7 @@ builder.Services.AddRateLimiter(o =>
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("RateLimit:AuthPerMinute", 10), Window = TimeSpan.FromMinutes(1) }));
 });
 
 var app = builder.Build();
@@ -59,7 +59,9 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseDefaultFiles();
-app.UseStaticFiles();
+var mime = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+mime.Mappings[".task"] = "application/octet-stream"; // MediaPipe pose model, unknown to ASP.NET by default
+app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = mime });
 
 string CreateToken(User u) => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
 {
@@ -142,6 +144,8 @@ app.MapGet("/go/{id:int}", async (int id, HttpContext ctx, AppDb db) =>
     return Results.Redirect(p.Url);
 });
 
+// Unknown API routes are real 404s (JSON), never the web page. Everything else falls back to the React app.
+app.MapFallback("/api/{**path}", () => Results.NotFound(new { error = "Not found." }));
 app.MapFallbackToFile("index.html");
 app.Run();
 

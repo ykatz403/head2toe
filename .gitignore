@@ -26,3 +26,10 @@ dist/
 Thumbs.db
 .idea/
 .vscode/
+
+# Built React app (served by the API) and test artefacts
+src/api/wwwroot/
+test-results/
+playwright-report/
+e2e-run.txt
+coverage/

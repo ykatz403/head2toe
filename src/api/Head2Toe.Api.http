@@ -1,0 +1,6 @@
+@Head2Toe.Api_HostAddress = http://localhost:5157
+
+GET {{Head2Toe.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

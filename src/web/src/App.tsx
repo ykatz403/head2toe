@@ -3,6 +3,7 @@ import { Stage } from './avatar/Stage'
 import { SKIN_TONES, type BodyShape } from './avatar/scene'
 import { AuthModal } from './components/AuthModal'
 import { OutfitPanel } from './components/OutfitPanel'
+import { PhotoTryOn } from './components/PhotoTryOn'
 import { ScanModal } from './components/ScanModal'
 import { api, ApiError, type Outfit } from './lib/api'
 import { useAuth } from './lib/auth'
@@ -15,6 +16,16 @@ const SEASON_NAME: Record<string, string> = { summer: 'Summer', winter: 'Winter'
 
 const toBody = (s: SavedBody | null): BodyShape =>
   s ? { heightCm: s.heightCm, buildPct: s.buildPct, skinTone: s.skinTone } : DEFAULT_BODY
+
+type View = 'photo' | '3d'
+const VIEW_KEY = 'h2t-view'
+const readView = (): View => {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'photo' ? 'photo' : '3d'
+  } catch {
+    return '3d'
+  }
+}
 
 export default function App() {
   const { email, signOut } = useAuth()
@@ -29,6 +40,15 @@ export default function App() {
   const [scanOpen, setScanOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [notice, setNotice] = useState('')
+  const [view, setView] = useState<View>(readView)
+  const pickView = (v: View) => {
+    setView(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      /* the choice just won't be remembered */
+    }
+  }
 
   // ---- outfit ----
   useEffect(() => {
@@ -131,7 +151,7 @@ export default function App() {
 
       <div className="hero">
         <h1>See the whole outfit on your own body before you buy a thing.</h1>
-        <p>Pick the occasion, scan yourself once at home, and shop every piece, from Uniqlo to Gucci, from the side panel.</p>
+        <p>Pick the occasion, see it on a 3D figure or upload your own photo, and shop every piece, from Uniqlo to Gucci, from the side panel.</p>
       </div>
 
       <div className="toolbar">
@@ -150,6 +170,12 @@ export default function App() {
 
       <div className="studio">
         <div>
+          <div className="seg viewtabs" role="group" aria-label="View">
+            <button type="button" aria-pressed={view === 'photo'} onClick={() => pickView('photo')}>My photo</button>
+            <button type="button" aria-pressed={view === '3d'} onClick={() => pickView('3d')}>3D figure</button>
+          </div>
+          {view === 'photo' && <PhotoTryOn items={items} />}
+          {view === '3d' && <>
           <Stage body={body} items={items} scanned={!!saved} />
           <div className="body-row">
             <div className="slider">
@@ -177,6 +203,7 @@ export default function App() {
             {notice || 'One scan at home, done once. Your photos are analysed on your device and never uploaded.'}
             {notice && !email && <> <button className="link" type="button" onClick={() => setAuthOpen(true)}>Create account</button></>}
           </p>
+          </>}
         </div>
 
         <OutfitPanel outfit={outfit} hidden={hidden} onToggle={toggle} title={`${SEASON_NAME[season]} · ${TIER_NAME[tier]}`} />

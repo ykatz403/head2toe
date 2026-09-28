@@ -77,7 +77,8 @@ export function PhotoTryOn() {
     setError('')
     setResultUrl(null)
     try {
-      const [humanImage, garmentImage] = await Promise.all([toDataUri(personFile.current), toDataUri(garmentFile.current)])
+      // A higher cap than the default: fine patterns hold up better with more source detail to work from.
+      const [humanImage, garmentImage] = await Promise.all([toDataUri(personFile.current, 1600), toDataUri(garmentFile.current, 1600)])
       const res = await api.tryOn(humanImage, garmentImage, description, category)
       setResultUrl(res.imageUrl)
     } catch (e) {

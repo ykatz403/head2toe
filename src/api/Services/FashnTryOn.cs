@@ -10,22 +10,17 @@ public record TryOnRequest(string HumanImage, string GarmentImage, string Garmen
 public record TryOnResult(string? ImageUrl, string? Error);
 
 /// <summary>
-/// Puts a real garment photo onto a real photo of a person using FASHN's Virtual Try-On (v1.6): a
-/// commercial model built specifically for this task, using "segmentation-free" mode by default -
-/// its own better-than-manual-masking technique for keeping the person's face, body and background
-/// unchanged, which is what we need after both a manually-masked open-source model and a general
-/// instruction editor failed to hold identity steady on real photos.
+/// Puts a real garment photo onto a real photo of a person using FASHN's Try-On Max: their high-fidelity
+/// tier (up to 4K, "enhanced fidelity"), built for publishable fashion photography rather than fast
+/// interactive previews. This is what we need after both a manually-masked open-source model and a
+/// general instruction editor failed to hold identity steady on real photos, and the faster tryon-v1.6
+/// endpoint softened fine patterns like checks and gingham.
 /// This is the one place the person's photo leaves the device - only to reach FASHN's inference API,
 /// never stored by this app.
 /// </summary>
 public class FashnTryOn
 {
-    static readonly Dictionary<string, string> CategoryMap = new()
-    {
-        ["upper_body"] = "tops",
-        ["lower_body"] = "bottoms",
-        ["dresses"] = "one-pieces",
-    };
+    static readonly string[] ValidCategories = ["upper_body", "lower_body", "dresses"]; // Max auto-detects the garment type; this is just input validation
 
     readonly HttpClient _http;
     readonly ILogger<FashnTryOn> _log;
@@ -45,18 +40,17 @@ public class FashnTryOn
     public async Task<TryOnResult> GenerateAsync(TryOnRequest req, CancellationToken ct)
     {
         if (!Configured) return new TryOnResult(null, "Try-on isn't configured yet. Set FASHN_API_TOKEN.");
-        if (!CategoryMap.TryGetValue(req.Category, out var category)) return new TryOnResult(null, "Category must be upper_body, lower_body or dresses.");
+        if (!ValidCategories.Contains(req.Category)) return new TryOnResult(null, "Category must be upper_body, lower_body or dresses.");
 
         var body = new
         {
-            model_name = "tryon-v1.6",
+            model_name = "tryon-max",
             inputs = new
             {
                 model_image = req.HumanImage,
-                garment_image = req.GarmentImage,
-                category,
-                segmentation_free = true,
-                mode = "balanced",
+                product_image = req.GarmentImage,
+                resolution = "2k",
+                generation_mode = "quality",
                 output_format = "jpeg",
             },
         };

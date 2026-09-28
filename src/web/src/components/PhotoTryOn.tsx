@@ -1,129 +1,195 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { LookItem } from '../avatar/scene'
-import type { Analysis } from '../lib/tryon'
+import { useEffect, useRef, useState } from 'react'
+import { api, ApiError } from '../lib/api'
+import { toDataUri } from '../lib/imageResize'
 import { photoStore } from '../lib/photoStore'
 
-type Status = 'loading' | 'empty' | 'ready'
-type TryOnModule = typeof import('../lib/tryon')
+type PersonStatus = 'loading' | 'empty' | 'ready'
+const CATEGORIES = [['upper_body', 'Top (shirt, sweater, jacket)'], ['lower_body', 'Bottoms (pants, shorts, skirt)'], ['dresses', 'Dress']] as const
 
-interface Props {
-  items: LookItem[]
-}
+export function PhotoTryOn() {
+  const [personStatus, setPersonStatus] = useState<PersonStatus>('loading')
+  const [personUrl, setPersonUrl] = useState<string | null>(null)
+  const personFile = useRef<Blob | null>(null)
 
-export function PhotoTryOn({ items }: Props) {
-  const [status, setStatus] = useState<Status>('loading')
+  const [garmentUrl, setGarmentUrl] = useState<string | null>(null)
+  const garmentFile = useRef<File | null>(null)
+  const [description, setDescription] = useState('')
+  const [category, setCategory] = useState<string>(CATEGORIES[0][0])
+
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [original, setOriginal] = useState(false)
-  const canvas = useRef<HTMLCanvasElement>(null)
-  const analysis = useRef<Analysis | null>(null)
-  const mod = useRef<TryOnModule | null>(null)
-  const [version, setVersion] = useState(0) // bumps when a new photo is analysed, to repaint
+  const [resultUrl, setResultUrl] = useState<string | null>(null)
+  const [configured, setConfigured] = useState<boolean | null>(null)
 
-  // The pose model is large, so it is only fetched once someone actually has a photo.
-  const load = useCallback(async (blob: Blob, save: boolean) => {
-    setStatus('loading')
-    setError('')
-    try {
-      mod.current ??= await import('../lib/tryon')
-      analysis.current = await mod.current.analyzePhoto(blob)
-      if (save) await photoStore.set(blob)
-      setVersion((v) => v + 1)
-      setStatus('ready')
-    } catch (e) {
-      analysis.current = null
-      setError(e instanceof Error && e.name === 'ScanError' ? e.message : "We couldn't process that photo. Try a different one.")
-      setStatus('empty')
-    }
-  }, [])
+  const personInput = useRef<HTMLInputElement>(null)
+  const garmentInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let stale = false
     photoStore.get().then((blob) => {
       if (stale) return
-      if (blob) void load(blob, false)
-      else setStatus('empty')
+      if (blob) {
+        personFile.current = blob
+        setPersonUrl(URL.createObjectURL(blob))
+        setPersonStatus('ready')
+      } else {
+        setPersonStatus('empty')
+      }
     })
+    api.tryOnStatus().then((s) => !stale && setConfigured(s.configured), () => {})
     return () => {
       stale = true
     }
-  }, [load])
+  }, [])
 
-  useEffect(() => {
-    if (status === 'ready' && analysis.current && mod.current && canvas.current)
-      mod.current.renderTryOn(analysis.current, canvas.current, items, original)
-  }, [status, items, original, version])
-
-  const choose = (file: File | undefined) => {
-    if (file) void load(file, true)
+  const choosePerson = async (file: File | undefined) => {
+    if (!file) return
+    personFile.current = file
+    setPersonUrl((old) => (old && URL.revokeObjectURL(old), URL.createObjectURL(file)))
+    setPersonStatus('ready')
+    setResultUrl(null)
+    setError('')
+    await photoStore.set(file)
   }
-  const remove = async () => {
+  const removePerson = async () => {
     await photoStore.clear()
-    analysis.current = null
-    setOriginal(false)
-    setStatus('empty')
+    setPersonUrl((old) => (old && URL.revokeObjectURL(old), null))
+    personFile.current = null
+    setResultUrl(null)
+    setPersonStatus('empty')
   }
-  const download = () => {
-    canvas.current?.toBlob((b) => {
-      if (!b) return
-      const url = URL.createObjectURL(b)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'head2toe-look.png'
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-    }, 'image/png')
+  const chooseGarment = (file: File | undefined) => {
+    if (!file) return
+    garmentFile.current = file
+    setGarmentUrl((old) => (old && URL.revokeObjectURL(old), URL.createObjectURL(file)))
+    setResultUrl(null)
+    setError('')
+  }
+  const removeGarment = () => {
+    setGarmentUrl((old) => (old && URL.revokeObjectURL(old), null))
+    garmentFile.current = null
+    setResultUrl(null)
   }
 
-  const fileInput = useRef<HTMLInputElement>(null)
-  const input = (
-    <input
-      id="try-photo"
-      ref={fileInput}
-      type="file"
-      accept="image/*"
-      hidden
-      onChange={(e) => { choose(e.target.files?.[0]); e.target.value = '' }}
-    />
-  )
-  const openPicker = () => fileInput.current?.click()
+  const generate = async () => {
+    if (!personFile.current || !garmentFile.current) return
+    setBusy(true)
+    setError('')
+    setResultUrl(null)
+    try {
+      const [humanImage, garmentImage] = await Promise.all([toDataUri(personFile.current), toDataUri(garmentFile.current)])
+      const res = await api.tryOn(humanImage, garmentImage, description, category)
+      setResultUrl(res.imageUrl)
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Something went wrong generating that. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const download = () => {
+    if (!resultUrl) return
+    const a = document.createElement('a')
+    a.href = resultUrl
+    a.download = 'head2toe-tryon.png'
+    a.target = '_blank'
+    a.rel = 'noopener'
+    a.click()
+  }
+
+  const personInputEl = <input id="tryon-person" ref={personInput} type="file" accept="image/*" hidden onChange={(e) => { void choosePerson(e.target.files?.[0]); e.target.value = '' }} />
+  const garmentInputEl = <input id="tryon-garment" ref={garmentInput} type="file" accept="image/*" hidden onChange={(e) => { chooseGarment(e.target.files?.[0]); e.target.value = '' }} />
 
   return (
-    <div>
-      <div className="photo-stage">
-        {status === 'loading' && <p className="fine" role="status">Finding you in the photo…</p>}
+    <div className="tryon">
+      {configured === false && (
+        <p className="err" role="alert">
+          Try-on isn't configured on this server yet (no FASHN API token set). Ask whoever runs this deployment to add one.
+        </p>
+      )}
 
-        {status === 'empty' && (
-          <div className="upload">
-            <h3>Put the outfit on your photo</h3>
-            <ul className="tips">
-              <li>A full-length photo: head to feet, standing, facing the camera.</li>
-              <li>Arms slightly away from your body, plain background, good light.</li>
-              <li>Fitted clothes work best. Loose clothes can show around the edges.</li>
-            </ul>
-            {error && <p className="err" role="alert">{error}</p>}
-            <button className="btn primary" type="button" onClick={openPicker}>Choose a photo</button>
-            <p className="fine">Your photo stays on this device. It is analysed in your browser and never uploaded.</p>
+      <div className="tryon-grid">
+        <div className="tryon-col">
+          <span className="eyebrow">1 · Your photo</span>
+          <div className="photo-stage small">
+            {personStatus === 'loading' && <p className="fine" role="status">Loading…</p>}
+            {personStatus === 'empty' && (
+              <div className="upload">
+                <p className="fine">A full-length photo: head to feet, facing the camera, plain background if possible.</p>
+                <button className="btn primary" type="button" onClick={() => personInput.current?.click()}>Choose your photo</button>
+              </div>
+            )}
+            {personStatus === 'ready' && personUrl && (
+              <>
+                <img className="tryon-img" src={personUrl} alt="You" />
+                <div className="photo-bar">
+                  <button className="btn sm" type="button" onClick={() => personInput.current?.click()}>Change</button>
+                  <button className="btn sm" type="button" onClick={() => void removePerson()}>Remove</button>
+                </div>
+              </>
+            )}
           </div>
-        )}
+          <p className="fine">Kept on this device between visits. Only sent to the try-on service when you click Generate below.</p>
+        </div>
 
-        {status === 'ready' && (
-          <>
-            <canvas ref={canvas} className="try-canvas" aria-label={original ? 'Your original photo' : 'Your photo wearing the outfit'} />
-            <div className="photo-bar">
-              <button className="btn sm" type="button" aria-pressed={original} onClick={() => setOriginal((o) => !o)}>
-                {original ? 'Show outfit' : 'Show original'}
-              </button>
-              <button className="btn sm" type="button" onClick={download}>Save image</button>
-              <button className="btn sm" type="button" onClick={openPicker}>Change photo</button>
-              <button className="btn sm" type="button" onClick={remove}>Remove photo</button>
+        <div className="tryon-col">
+          <span className="eyebrow">2 · The garment</span>
+          <div className="photo-stage small">
+            {!garmentUrl ? (
+              <div className="upload">
+                <p className="fine">A clear product photo of one item: a shirt, a pair of pants, a dress. Flat-lay or on a mannequin works best.</p>
+                <button className="btn primary" type="button" onClick={() => garmentInput.current?.click()}>Choose a garment photo</button>
+              </div>
+            ) : (
+              <>
+                <img className="tryon-img" src={garmentUrl} alt="Garment" />
+                <div className="photo-bar">
+                  <button className="btn sm" type="button" onClick={() => garmentInput.current?.click()}>Change</button>
+                  <button className="btn sm" type="button" onClick={removeGarment}>Remove</button>
+                </div>
+              </>
+            )}
+          </div>
+          <div className="tryon-fields">
+            <div className="slider">
+              <label htmlFor="garment-desc">Description</label>
+              <input id="garment-desc" className="num" type="text" placeholder="e.g. Short sleeve round neck t-shirt" value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
-          </>
-        )}
+            <div className="slider">
+              <label htmlFor="garment-cat">Type</label>
+              <select id="garment-cat" className="num" value={category} onChange={(e) => setCategory(e.target.value)}>
+                {CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
-      {input}
-      <p className="fine" style={{ marginTop: 10 }}>
-        Preview: the clothes are placed using body detection and shaded from your photo, so it is an approximation, not a photo-real fitting.
-        Layers hidden under others (undershirts, underwear) aren't drawn.
+
+      {personInputEl}
+      {garmentInputEl}
+
+      <div className="tryon-actions">
+        <button className="btn primary" type="button" disabled={busy || !personUrl || !garmentUrl || configured === false} onClick={() => void generate()}>
+          {busy ? 'Generating…' : 'Generate'}
+        </button>
+        {busy && <p className="fine" role="status">This calls a real AI model and usually takes 10–20 seconds.</p>}
+      </div>
+
+      {error && <p className="err" role="alert">{error}</p>}
+
+      {resultUrl && (
+        <div className="tryon-result">
+          <span className="eyebrow">Result</span>
+          <img className="tryon-img large" src={resultUrl} alt="You wearing the garment" />
+          <div className="photo-bar static">
+            <button className="btn sm" type="button" onClick={download}>Save image</button>
+          </div>
+        </div>
+      )}
+
+      <p className="fine tryon-note">
+        This generates one garment at a time (top, bottom, or dress) using a real AI model — it doesn't yet cover hats, shoes, glasses or a full outfit in one image.
+        Your photo is sent only to the try-on service when you click Generate, never stored on our server.
       </p>
     </div>
   )

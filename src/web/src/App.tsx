@@ -174,7 +174,7 @@ export default function App() {
             <button type="button" aria-pressed={view === 'photo'} onClick={() => pickView('photo')}>My photo</button>
             <button type="button" aria-pressed={view === '3d'} onClick={() => pickView('3d')}>3D figure</button>
           </div>
-          {view === 'photo' && <PhotoTryOn items={items} />}
+          {view === 'photo' && <PhotoTryOn />}
           {view === '3d' && <>
           <Stage body={body} items={items} scanned={!!saved} />
           <div className="body-row">

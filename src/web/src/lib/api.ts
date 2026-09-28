@@ -32,6 +32,9 @@ interface AuthResponse {
   token: string
   email: string
 }
+export interface TryOnResult {
+  imageUrl: string
+}
 
 export class ApiError extends Error {
   status: number
@@ -84,4 +87,10 @@ export const api = {
   deleteScan: () => request<null>('/api/scan', { method: 'DELETE' }),
   outfit: (season: string, tier: string, seed: number) =>
     request<Outfit>(`/api/outfit?season=${season}&tier=${tier}&seed=${seed}`) as Promise<Outfit>,
+  tryOnStatus: () => request<{ configured: boolean }>('/api/tryon/status') as Promise<{ configured: boolean }>,
+  tryOn: (humanImage: string, garmentImage: string, garmentDescription: string, category: string) =>
+    request<TryOnResult>('/api/tryon', {
+      method: 'POST',
+      body: JSON.stringify({ humanImage, garmentImage, garmentDescription, category }),
+    }) as Promise<TryOnResult>,
 }

@@ -9,7 +9,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
+EnvFile.Load(Path.Combine(Directory.GetCurrentDirectory(), ".env"));
+
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddEnvironmentVariables();
+// FASHN_API_TOKEN is the name used in setup instructions, which doesn't match the Fashn__ApiToken
+// convention AddEnvironmentVariables expects, so it's bridged in explicitly.
+if (Environment.GetEnvironmentVariable("FASHN_API_TOKEN") is { Length: > 0 } fashnToken)
+    builder.Configuration["Fashn:ApiToken"] = fashnToken;
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is not set.");
 if (!builder.Environment.IsDevelopment() && jwtKey.StartsWith("DEV-ONLY"))
@@ -39,7 +46,14 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("RateLimit:AuthPerMinute", 10), Window = TimeSpan.FromMinutes(1) }));
+    // Each try-on call costs real money on FASHN, so this is capped far tighter than a normal API route.
+    o.AddPolicy("tryon", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("RateLimit:TryOnPerMinute", 4), Window = TimeSpan.FromMinutes(1) }));
 });
+builder.Services.AddHttpClient<FashnTryOn>(c => c.Timeout = TimeSpan.FromSeconds(100));
+// Photos travel as base64 JSON; give the request body enough room for two photos plus JSON overhead.
+builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(o => o.Limits.MaxRequestBodySize = 30 * 1024 * 1024);
 
 var app = builder.Build();
 
@@ -142,6 +156,18 @@ app.MapGet("/go/{id:int}", async (int id, HttpContext ctx, AppDb db) =>
     db.Clicks.Add(new ClickEvent { ProductId = id, Referrer = ctx.Request.Headers.Referer.ToString() is { Length: > 0 } r ? r[..Math.Min(r.Length, 300)] : null });
     await db.SaveChangesAsync();
     return Results.Redirect(p.Url);
+});
+
+// ---- real photo try-on: your photo + one garment photo -> a real AI-generated composite ----
+// Stateless by design: every call sends the person's photo again, since the model has no memory between calls.
+var tryon = api.MapGroup("/tryon").RequireRateLimiting("tryon");
+tryon.MapGet("/status", (FashnTryOn r) => Results.Ok(new { configured = r.Configured }));
+tryon.MapPost("", async (TryOnRequest req, FashnTryOn r, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(req.HumanImage) || string.IsNullOrWhiteSpace(req.GarmentImage))
+        return Results.BadRequest(new { error = "Both a photo of you and a photo of the garment are required." });
+    var result = await r.GenerateAsync(req, ct);
+    return result.ImageUrl is not null ? Results.Ok(new { imageUrl = result.ImageUrl }) : Results.UnprocessableEntity(new { error = result.Error });
 });
 
 // Unknown API routes are real 404s (JSON), never the web page. Everything else falls back to the React app.

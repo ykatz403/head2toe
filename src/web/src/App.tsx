@@ -29,6 +29,7 @@ const readView = (): View => {
 
 export default function App() {
   const { email, signOut } = useAuth()
+  const [sideEl, setSideEl] = useState<HTMLDivElement | null>(null)
   const [season, setSeason] = useState('summer')
   const [tier, setTier] = useState('both')
   const [seed, setSeed] = useState(0)
@@ -174,7 +175,7 @@ export default function App() {
             <button type="button" aria-pressed={view === 'photo'} onClick={() => pickView('photo')}>My photo</button>
             <button type="button" aria-pressed={view === '3d'} onClick={() => pickView('3d')}>3D figure</button>
           </div>
-          {view === 'photo' && <PhotoTryOn />}
+          {view === 'photo' && <PhotoTryOn sidePanelSlot={sideEl} />}
           {view === '3d' && <>
           <Stage body={body} items={items} scanned={!!saved} />
           <div className="body-row">
@@ -206,7 +207,9 @@ export default function App() {
           </>}
         </div>
 
-        <OutfitPanel outfit={outfit} hidden={hidden} onToggle={toggle} title={`${SEASON_NAME[season]} · ${TIER_NAME[tier]}`} />
+        {view === '3d'
+          ? <OutfitPanel outfit={outfit} hidden={hidden} onToggle={toggle} title={`${SEASON_NAME[season]} · ${TIER_NAME[tier]}`} />
+          : <div ref={setSideEl} />}
       </div>
 
       <footer>

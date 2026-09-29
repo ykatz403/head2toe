@@ -98,19 +98,14 @@ export const api = {
   outfit: (season: string, tier: string, seed: number) =>
     request<Outfit>(`/api/outfit?season=${season}&tier=${tier}&seed=${seed}`) as Promise<Outfit>,
   tryOnStatus: () => request<{ configured: boolean }>('/api/tryon/status') as Promise<{ configured: boolean }>,
-  tryOn: (humanImage: string, garmentImage: string, garmentDescription: string, category: string) =>
+  tryOn: (humanImage: string, garmentImage: string, garmentDescription: string, category: string, numImages?: number) =>
     request<TryOnResult>('/api/tryon', {
       method: 'POST',
-      body: JSON.stringify({ humanImage, garmentImage, garmentDescription, category }),
+      body: JSON.stringify(numImages ? { humanImage, garmentImage, garmentDescription, category, numImages } : { humanImage, garmentImage, garmentDescription, category }),
     }) as Promise<TryOnResult>,
   findProducts: (description: string, slot?: string) =>
     request<{ results: ProductMatch[] }>('/api/products/find', {
       method: 'POST',
       body: JSON.stringify({ description, slot }),
     }) as Promise<{ results: ProductMatch[] }>,
-  async fetchProductImage(url: string): Promise<Blob> {
-    const res = await fetch(`/api/products/image?url=${encodeURIComponent(url)}`)
-    if (!res.ok) throw new ApiError(res.status, 'Could not load that product photo.')
-    return res.blob()
-  },
 }

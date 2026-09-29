@@ -1,15 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api, ApiError, type ProductMatch } from '../lib/api'
 import { toDataUri } from '../lib/imageResize'
 import { photoStore } from '../lib/photoStore'
 
 type PersonStatus = 'loading' | 'empty' | 'ready'
 type GarmentMode = 'upload' | 'search'
-const CATEGORIES = [['upper_body', 'Top (shirt, sweater, jacket)'], ['lower_body', 'Bottoms (pants, shorts, skirt)'], ['dresses', 'Dress']] as const
-// Only these two slots map to a try-on category the model supports; shoes show up to shop but can't be tried on yet.
-const SLOT_CATEGORY: Record<string, string> = { shirt: 'upper_body', jacket: 'upper_body', pants: 'lower_body' }
+const CATEGORIES = [
+  ['upper_body', 'Top (shirt, sweater, jacket)'],
+  ['lower_body', 'Bottoms (pants, shorts, skirt)'],
+  ['dresses', 'Dress'],
+  ['footwear', 'Shoes'],
+] as const
+// FASHN's tryon-max handles shoes as just another single item, same as a top or bottom.
+const SLOT_CATEGORY: Record<string, string> = { shirt: 'upper_body', jacket: 'upper_body', pants: 'lower_body', shoes: 'footwear' }
 
-export function PhotoTryOn() {
+interface Props {
+  /** Where to portal the matches panel (the app's right-hand "shop this look" column). Renders inline if omitted. */
+  sidePanelSlot?: HTMLElement | null
+}
+
+export function PhotoTryOn({ sidePanelSlot }: Props) {
   const [personStatus, setPersonStatus] = useState<PersonStatus>('loading')
   const [personUrl, setPersonUrl] = useState<string | null>(null)
   const personFile = useRef<Blob | null>(null)
@@ -24,11 +35,13 @@ export function PhotoTryOn() {
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [matches, setMatches] = useState<ProductMatch[]>([])
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  // At most one selected item per slot (a second shirt replaces the first), but different slots can combine.
+  const [selected, setSelected] = useState<Record<string, ProductMatch>>({})
   const [changingId, setChangingId] = useState<number | null>(null)
   const [changeText, setChangeText] = useState('')
 
   const [busy, setBusy] = useState(false)
+  const [progressLabel, setProgressLabel] = useState('')
   const [error, setError] = useState('')
   const [resultUrls, setResultUrls] = useState<string[]>([])
   const [configured, setConfigured] = useState<boolean | null>(null)
@@ -87,7 +100,7 @@ export function PhotoTryOn() {
     setGarmentMode(mode)
     removeGarment()
     setMatches([])
-    setSelectedId(null)
+    setSelected({})
     setSearchError('')
   }
 
@@ -96,7 +109,6 @@ export function PhotoTryOn() {
     setSearching(true)
     setSearchError('')
     setMatches([])
-    setSelectedId(null)
     try {
       const res = await api.findProducts(query)
       setMatches(res.results)
@@ -108,22 +120,15 @@ export function PhotoTryOn() {
     }
   }
 
-  const useMatch = async (item: ProductMatch) => {
-    if (!item.image) return
-    setSearchError('')
-    try {
-      const blob = await api.fetchProductImage(item.image)
-      garmentFile.current = blob
-      setGarmentUrl((old) => (old && URL.revokeObjectURL(old), URL.createObjectURL(blob)))
-      setResultUrls([])
-      setError('')
-      setSelectedId(item.id)
-      setDescription(`${item.brand} ${item.name}`)
-      const cat = SLOT_CATEGORY[item.slot]
-      if (cat) setCategory(cat)
-    } catch (e) {
-      setSearchError(e instanceof ApiError ? e.message : 'Could not load that product photo. Try again.')
-    }
+  const toggleSelect = (item: ProductMatch) => {
+    setSelected((old) => {
+      const next = { ...old }
+      if (next[item.slot]?.id === item.id) delete next[item.slot]
+      else next[item.slot] = item
+      return next
+    })
+    setResultUrls([])
+    setError('')
   }
 
   const startChange = (item: ProductMatch) => {
@@ -140,7 +145,7 @@ export function PhotoTryOn() {
       const replacement = res.results[0]
       if (replacement) {
         setMatches((old) => old.map((m) => (m.id === item.id ? replacement : m)))
-        if (selectedId === item.id) await useMatch(replacement)
+        setSelected((old) => (old[item.slot]?.id === item.id ? { ...old, [item.slot]: replacement } : old))
       } else {
         setSearchError("Nothing matched that for this item. Try describing it differently.")
       }
@@ -152,20 +157,50 @@ export function PhotoTryOn() {
     }
   }
 
+  const selectedItems = Object.values(selected)
+  const hasGarment = garmentMode === 'upload' ? !!garmentUrl : selectedItems.length > 0
+
   const generate = async () => {
-    if (!personFile.current || !garmentFile.current) return
+    if (!personFile.current || !hasGarment) return
     setBusy(true)
     setError('')
     setResultUrls([])
+    setProgressLabel('')
     try {
-      // A higher cap than the default: fine patterns hold up better with more source detail to work from.
-      const [humanImage, garmentImage] = await Promise.all([toDataUri(personFile.current, 1600), toDataUri(garmentFile.current, 1600)])
-      const res = await api.tryOn(humanImage, garmentImage, description, category)
-      setResultUrls(res.imageUrls)
+      if (garmentMode === 'search' && selectedItems.length > 1) {
+        // FASHN composites one item per call with no native multi-garment support (confirmed against their
+        // docs), so multiple items means chaining: each round's output becomes the next round's base photo.
+        // Only the last round asks for multiple variations - branching 3-ways at every step would multiply
+        // cost for variations we'd throw away anyway.
+        let baseImage = await toDataUri(personFile.current, 1600)
+        let finalUrls: string[] = []
+        for (let i = 0; i < selectedItems.length; i++) {
+          const item = selectedItems[i]
+          const isLast = i === selectedItems.length - 1
+          setProgressLabel(`Adding ${item.name}… (${i + 1} of ${selectedItems.length})`)
+          if (!item.image) throw new ApiError(422, `${item.name} has no usable photo. Remove it and try another item.`)
+          const res = await api.tryOn(baseImage, item.image, `${item.brand} ${item.name}`, SLOT_CATEGORY[item.slot] ?? 'upper_body', isLast ? 3 : 1)
+          if (!res.imageUrls?.length) throw new ApiError(422, `Could not add the ${item.slot}. Try a different item.`)
+          baseImage = res.imageUrls[0]
+          if (isLast) finalUrls = res.imageUrls
+        }
+        setResultUrls(finalUrls)
+      } else {
+        const garmentImage = garmentMode === 'search'
+          ? selectedItems[0].image!
+          : await toDataUri(garmentFile.current!, 1600)
+        const desc = garmentMode === 'search' ? `${selectedItems[0].brand} ${selectedItems[0].name}` : description
+        const cat = garmentMode === 'search' ? (SLOT_CATEGORY[selectedItems[0].slot] ?? 'upper_body') : category
+        // A higher cap than the default: fine patterns hold up better with more source detail to work from.
+        const humanImage = await toDataUri(personFile.current, 1600)
+        const res = await api.tryOn(humanImage, garmentImage, desc, cat)
+        setResultUrls(res.imageUrls)
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Something went wrong generating that. Try again.')
     } finally {
       setBusy(false)
+      setProgressLabel('')
     }
   }
 
@@ -180,6 +215,69 @@ export function PhotoTryOn() {
 
   const personInputEl = <input id="tryon-person" ref={personInput} type="file" accept="image/*" hidden onChange={(e) => { void choosePerson(e.target.files?.[0]); e.target.value = '' }} />
   const garmentInputEl = <input id="tryon-garment" ref={garmentInput} type="file" accept="image/*" hidden onChange={(e) => { chooseGarment(e.target.files?.[0]); e.target.value = '' }} />
+
+  const matchesPanel = (
+    <aside className="panel" aria-label="Style matches">
+      <div className="panel-head">
+        <h3>Style matches</h3>
+        {matches.length > 0 && <span className="eyebrow">{matches.length} found</span>}
+      </div>
+      {garmentMode === 'upload' && <p className="fine panel-empty">Switch to "Describe what you want" to find real items here.</p>}
+      {garmentMode === 'search' && matches.length === 0 && !searching && (
+        <p className="fine panel-empty">Describe what you're looking for on the left to see real matches here.</p>
+      )}
+      {searching && matches.length === 0 && <p className="fine panel-empty" role="status">Searching…</p>}
+      {garmentMode === 'search' && matches.length > 0 && (
+        <>
+          <ul className="outfit">
+            {matches.map((m) => {
+              const isSelected = selected[m.slot]?.id === m.id
+              return (
+                <li key={m.id}>
+                  <span className="sw">{m.image && <img src={m.image} alt="" />}</span>
+                  <div>
+                    <div className="slot">{m.slot}</div>
+                    <div className="nm">{m.name}</div>
+                    <div className="br">{m.brand} · ${m.price.toFixed(2)}</div>
+                  </div>
+                  <div className="right">
+                    <div className="acts">
+                      <button className="btn sm" type="button" aria-pressed={isSelected} onClick={() => toggleSelect(m)}>
+                        {isSelected ? 'Added' : 'Add'}
+                      </button>
+                      <button className="btn sm" type="button" onClick={() => startChange(m)}>Change</button>
+                      <a className="shop" href={m.url} target="_blank" rel="noopener sponsored">Shop ↗</a>
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          {changingId !== null && (
+            <div className="change-row">
+              <input
+                className="num"
+                type="text"
+                placeholder="Describe a replacement…"
+                value={changeText}
+                onChange={(e) => setChangeText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void submitChange(matches.find((m) => m.id === changingId)!)}
+              />
+              <button
+                className="btn sm primary"
+                type="button"
+                disabled={searching || !changeText.trim()}
+                onClick={() => void submitChange(matches.find((m) => m.id === changingId)!)}
+              >
+                Find
+              </button>
+              <button className="btn sm" type="button" onClick={() => setChangingId(null)}>Cancel</button>
+            </div>
+          )}
+        </>
+      )}
+    </aside>
+  )
 
   return (
     <div className="tryon">
@@ -240,104 +338,53 @@ export function PhotoTryOn() {
           )}
 
           {garmentMode === 'search' && (
-            <>
-              <div className="photo-stage small">
-                {!garmentUrl ? (
-                  <div className="upload">
-                    <p className="fine">Describe what you're looking for — e.g. "a casual corduroy shirt for fall". We'll find a real matching item below.</p>
-                    <div className="tryon-fields" style={{ width: '100%' }}>
-                      <input
-                        className="num"
-                        type="text"
-                        placeholder="What are you looking for?"
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && void runSearch()}
-                      />
-                    </div>
-                    <button className="btn primary" type="button" disabled={searching || !query.trim()} onClick={() => void runSearch()}>
-                      {searching ? 'Searching…' : 'Find items'}
-                    </button>
+            <div className="photo-stage small">
+              <div className="upload">
+                <p className="fine">Describe what you're looking for — e.g. "a navy blazer" or "warm shoes for fall". Add as many items as you like, one per category.</p>
+                <div className="tryon-fields" style={{ width: '100%' }}>
+                  <input
+                    className="num"
+                    type="text"
+                    placeholder="What are you looking for?"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && void runSearch()}
+                  />
+                </div>
+                <button className="btn primary" type="button" disabled={searching || !query.trim()} onClick={() => void runSearch()}>
+                  {searching ? 'Searching…' : 'Find items'}
+                </button>
+                {selectedItems.length > 0 && (
+                  <div className="chips">
+                    {selectedItems.map((item) => (
+                      <span key={item.id} className="chip">
+                        {item.image && <img src={item.image} alt="" />}
+                        {item.name}
+                        <button type="button" aria-label={`Remove ${item.name}`} onClick={() => toggleSelect(item)}>×</button>
+                      </span>
+                    ))}
                   </div>
-                ) : (
-                  <>
-                    <img className="tryon-img" src={garmentUrl} alt="Selected garment" />
-                    <div className="photo-bar">
-                      <button className="btn sm" type="button" onClick={removeGarment}>Clear selection</button>
-                    </div>
-                  </>
                 )}
               </div>
-
-              {searchError && <p className="err" role="alert">{searchError}</p>}
-
-              {matches.length > 0 && (
-                <aside className="panel" aria-label="Matching items">
-                  <div className="panel-head">
-                    <h3>Matches</h3>
-                    <span className="eyebrow">{matches.length} found</span>
-                  </div>
-                  <ul className="outfit">
-                    {matches.map((m) => (
-                      <li key={m.id}>
-                        <span className="sw">{m.image && <img src={m.image} alt="" />}</span>
-                        <div>
-                          <div className="slot">{m.slot}</div>
-                          <div className="nm">{m.name}</div>
-                          <div className="br">{m.brand} · ${m.price.toFixed(2)}</div>
-                        </div>
-                        <div className="right">
-                          <div className="acts">
-                            {SLOT_CATEGORY[m.slot] && (
-                              <button className="btn sm" type="button" aria-pressed={selectedId === m.id} onClick={() => void useMatch(m)}>
-                                {selectedId === m.id ? 'Selected' : 'Use'}
-                              </button>
-                            )}
-                            <button className="btn sm" type="button" onClick={() => startChange(m)}>Change</button>
-                            <a className="shop" href={m.url} target="_blank" rel="noopener sponsored">Shop ↗</a>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  {changingId !== null && (
-                    <div className="change-row">
-                      <input
-                        className="num"
-                        type="text"
-                        placeholder="Describe a replacement…"
-                        value={changeText}
-                        onChange={(e) => setChangeText(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && void submitChange(matches.find((m) => m.id === changingId)!)}
-                      />
-                      <button
-                        className="btn sm primary"
-                        type="button"
-                        disabled={searching || !changeText.trim()}
-                        onClick={() => void submitChange(matches.find((m) => m.id === changingId)!)}
-                      >
-                        Find
-                      </button>
-                      <button className="btn sm" type="button" onClick={() => setChangingId(null)}>Cancel</button>
-                    </div>
-                  )}
-                </aside>
-              )}
-            </>
+            </div>
           )}
 
-          <div className="tryon-fields">
-            <div className="slider">
-              <label htmlFor="garment-desc">Description</label>
-              <input id="garment-desc" className="num" type="text" placeholder="e.g. Short sleeve round neck t-shirt" value={description} onChange={(e) => setDescription(e.target.value)} />
+          {searchError && <p className="err" role="alert">{searchError}</p>}
+
+          {garmentMode === 'upload' && (
+            <div className="tryon-fields">
+              <div className="slider">
+                <label htmlFor="garment-desc">Description</label>
+                <input id="garment-desc" className="num" type="text" placeholder="e.g. Short sleeve round neck t-shirt" value={description} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+              <div className="slider">
+                <label htmlFor="garment-cat">Type</label>
+                <select id="garment-cat" className="num" value={category} onChange={(e) => setCategory(e.target.value)}>
+                  {CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
             </div>
-            <div className="slider">
-              <label htmlFor="garment-cat">Type</label>
-              <select id="garment-cat" className="num" value={category} onChange={(e) => setCategory(e.target.value)}>
-                {CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -345,9 +392,9 @@ export function PhotoTryOn() {
       {garmentInputEl}
 
       <div className="tryon-actions">
-        <button className="btn primary" type="button" disabled={busy || !personUrl || !garmentUrl || configured === false} onClick={() => void generate()}>
+        <button className="btn primary" type="button" disabled={busy || !personUrl || !hasGarment || configured === false} onClick={() => void generate()}>
           {busy && <span className="spinner" aria-hidden="true" />}
-          {busy ? 'Generating…' : 'Generate'}
+          {busy ? 'Generating…' : selectedItems.length > 1 ? `Generate (${selectedItems.length} items)` : 'Generate'}
         </button>
       </div>
 
@@ -358,7 +405,7 @@ export function PhotoTryOn() {
           <span className="eyebrow">Generating…</span>
           <div className="tryon-loading" role="status">
             <span className="spinner large" aria-hidden="true" />
-            <p className="fine">This calls a real AI model and usually takes 10–20 seconds.</p>
+            <p className="fine">{progressLabel || 'This calls a real AI model and usually takes 10–20 seconds.'}</p>
           </div>
         </div>
       )}
@@ -380,10 +427,12 @@ export function PhotoTryOn() {
       )}
 
       <p className="fine tryon-note">
-        This generates one garment at a time (top, bottom, or dress) using a real AI model — it doesn't yet cover hats, shoes, glasses or a full outfit in one image.
+        Adding more than one item (e.g. a jacket and shoes) runs one AI call per item, layering each onto the previous result — it takes longer and costs more per generation than a single item.
         Your photo is sent only to the try-on service when you click Generate, never stored on our server.
         Multiple results per click is a temporary way to see the model's range — production would generate one.
       </p>
+
+      {sidePanelSlot ? createPortal(matchesPanel, sidePanelSlot) : matchesPanel}
     </div>
   )
 }

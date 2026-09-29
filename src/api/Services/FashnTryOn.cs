@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace Head2Toe.Api.Services;
 
-public record TryOnRequest(string HumanImage, string GarmentImage, string GarmentDescription, string Category);
+public record TryOnRequest(string HumanImage, string GarmentImage, string GarmentDescription, string Category, int? NumImages = null);
 
 /// <summary>Either the generated images' URLs, or a message safe to show the user.</summary>
 public record TryOnResult(string[]? ImageUrls, string? Error);
@@ -20,7 +20,19 @@ public record TryOnResult(string[]? ImageUrls, string? Error);
 /// </summary>
 public class FashnTryOn
 {
-    static readonly string[] ValidCategories = ["upper_body", "lower_body", "dresses"]; // Max auto-detects the garment type; this is just input validation
+    // Max auto-detects the garment type and isn't sent this value at all - it's just input validation and
+    // picks the noun used in the prompt below. FASHN documents tryon-max as also handling shoes/hats/bags,
+    // so "footwear" is included even though nothing here is upper/lower/dress-specific.
+    static readonly string[] ValidCategories = ["upper_body", "lower_body", "dresses", "footwear"];
+
+    static string CategoryNoun(string category) => category switch
+    {
+        "upper_body" => "top",
+        "lower_body" => "pants",
+        "dresses" => "dress",
+        "footwear" => "shoes",
+        _ => "garment",
+    };
 
     readonly HttpClient _http;
     readonly ILogger<FashnTryOn> _log;
@@ -40,8 +52,10 @@ public class FashnTryOn
     public async Task<TryOnResult> GenerateAsync(TryOnRequest req, CancellationToken ct)
     {
         if (!Configured) return new TryOnResult(null, "Try-on isn't configured yet. Set FASHN_API_TOKEN.");
-        if (!ValidCategories.Contains(req.Category)) return new TryOnResult(null, "Category must be upper_body, lower_body or dresses.");
+        if (!ValidCategories.Contains(req.Category)) return new TryOnResult(null, "Category must be upper_body, lower_body, dresses or footwear.");
 
+        var itemNoun = CategoryNoun(req.Category);
+        var itemPhrase = string.IsNullOrWhiteSpace(req.GarmentDescription) ? itemNoun : req.GarmentDescription;
         var body = new
         {
             model_name = "tryon-max",
@@ -52,14 +66,20 @@ public class FashnTryOn
                 // Targets the two failure modes seen so far: the garment being redesigned rather than
                 // copied (wrong collar/buttons/silhouette), and the person's own face/body drifting.
                 // Wording this explicitly measurably reduces both, without guaranteeing either.
-                prompt = "Reproduce the garment from the second photo exactly: match its collar shape, button count and placement, silhouette, cut and pattern precisely - do not redesign or reinterpret it. " +
-                         "Keep the person's face, identity, skin tone, hairstyle, body shape, pose, hands, shoes and the entire background exactly as shown in the first photo - do not alter or regenerate them. " +
+                // Phrased generically (not "keep shoes as-is") so this also works when the first photo is
+                // itself a previous try-on result being layered with a second item - e.g. adding shoes to a
+                // photo that already has a new jacket composited in should keep that jacket, not revert it.
+                prompt = $"Reproduce the {itemPhrase} from the second photo exactly: match its shape, color, texture, cut and details precisely - do not redesign or reinterpret it. " +
+                         "Keep the person's face, identity, skin tone, hairstyle, body shape, pose, hands and the entire background exactly as shown in the first photo - do not alter or regenerate them. " +
+                         $"Keep everything else the person is already wearing in the first photo exactly as it appears there - change only the {itemNoun}. " +
                          "Do not add any clothing tags, labels, logos, text, or graphics that are not visibly present in the reference photos.",
                 resolution = "2k",
                 generation_mode = "quality",
                 output_format = "jpeg",
-                // Diagnostic only: seeing the spread of results at once, not how this would ship.
-                num_images = 3,
+                // Diagnostic only: seeing the spread of results at once, not how this would ship. Chained
+                // multi-item calls override this down to 1 for every round but the last, since branching
+                // 3-ways at each step would multiply cost with no way to use the extra variations anyway.
+                num_images = Math.Clamp(req.NumImages ?? 3, 1, 4),
             },
         };
 

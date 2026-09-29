@@ -235,28 +235,6 @@ products.MapPost("/find", async (FindRequest req, PreferencePicker picker, AppDb
     return Results.Ok(new { query = req.Description, results = items });
 }).RequireRateLimiting("search");
 
-// ---- image proxy: fetches a seed-catalog product photo server-side so the browser never needs ----
-// cross-origin access to the retailer's CDN. Locked to the exact hosts RealProductSeed actually uses.
-var allowedImageHosts = new HashSet<string> { "cdn.shopify.com", "www.allbirds.com" };
-products.MapGet("/image", async (string url, IHttpClientFactory httpFactory, CancellationToken ct) =>
-{
-    if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !allowedImageHosts.Contains(uri.Host))
-        return Results.BadRequest(new { error = "That image source isn't allowed." });
-    using var client = httpFactory.CreateClient();
-    HttpResponseMessage res;
-    try
-    {
-        res = await client.GetAsync(uri, ct);
-    }
-    catch (HttpRequestException)
-    {
-        return Results.UnprocessableEntity(new { error = "Could not fetch that image." });
-    }
-    if (!res.IsSuccessStatusCode) return Results.UnprocessableEntity(new { error = "Could not fetch that image." });
-    var bytes = await res.Content.ReadAsByteArrayAsync(ct);
-    return Results.File(bytes, res.Content.Headers.ContentType?.MediaType ?? "image/jpeg");
-}).RequireRateLimiting("search");
-
 // Unknown API routes are real 404s (JSON), never the web page. Everything else falls back to the React app.
 app.MapFallback("/api/{**path}", () => Results.NotFound(new { error = "Not found." }));
 app.MapFallbackToFile("index.html");

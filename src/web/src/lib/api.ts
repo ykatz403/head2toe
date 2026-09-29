@@ -35,6 +35,16 @@ interface AuthResponse {
 export interface TryOnResult {
   imageUrls: string[]
 }
+export interface ProductMatch {
+  id: number
+  slot: string
+  name: string
+  brand: string
+  price: number
+  url: string
+  image: string | null
+  reason: string
+}
 
 export class ApiError extends Error {
   status: number
@@ -93,4 +103,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ humanImage, garmentImage, garmentDescription, category }),
     }) as Promise<TryOnResult>,
+  findProducts: (description: string, slot?: string) =>
+    request<{ results: ProductMatch[] }>('/api/products/find', {
+      method: 'POST',
+      body: JSON.stringify({ description, slot }),
+    }) as Promise<{ results: ProductMatch[] }>,
+  async fetchProductImage(url: string): Promise<Blob> {
+    const res = await fetch(`/api/products/image?url=${encodeURIComponent(url)}`)
+    if (!res.ok) throw new ApiError(res.status, 'Could not load that product photo.')
+    return res.blob()
+  },
 }

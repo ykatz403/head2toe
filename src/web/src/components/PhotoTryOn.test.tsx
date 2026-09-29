@@ -74,7 +74,7 @@ describe('PhotoTryOn', () => {
     await waitFor(() => expect(m.tryOn).toHaveBeenCalledWith(
       'data:image/jpeg;base64,PERSON', 'data:image/jpeg;base64,GARMENT', 'Green linen shirt', 'lower_body',
     ))
-    expect(await screen.findByAltText('You wearing the garment')).toHaveAttribute('src', 'https://example.com/result.png')
+    expect(await screen.findByAltText('You wearing the garment, variation 1')).toHaveAttribute('src', 'https://example.com/result.png')
   })
 
   it('disables Generate and shows a wait message while the request is in flight', async () => {
@@ -86,7 +86,7 @@ describe('PhotoTryOn', () => {
     await upload('tryon-garment', photo('shirt.png'))
     await user.click(screen.getByRole('button', { name: 'Generate' }))
     expect(await screen.findByRole('button', { name: 'Generating…' })).toBeDisabled()
-    expect(screen.getByText(/20.*40 seconds/)).toBeInTheDocument()
+    expect(screen.getByText(/10.*20 seconds/)).toBeInTheDocument()
     resolve({ imageUrls: ['https://example.com/r.png'] })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
   })

@@ -33,7 +33,7 @@ interface AuthResponse {
   email: string
 }
 export interface TryOnResult {
-  imageUrl: string
+  imageUrls: string[]
 }
 
 export class ApiError extends Error {

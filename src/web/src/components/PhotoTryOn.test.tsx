@@ -63,7 +63,7 @@ describe('PhotoTryOn', () => {
   })
 
   it('sends the resized images, description and category, and shows the result', async () => {
-    m.tryOn.mockResolvedValue({ imageUrl: 'https://example.com/result.png' })
+    m.tryOn.mockResolvedValue({ imageUrls: ['https://example.com/result.png'] })
     const user = userEvent.setup()
     render(<PhotoTryOn />)
     await upload('tryon-person', photo('me.png'))
@@ -78,7 +78,7 @@ describe('PhotoTryOn', () => {
   })
 
   it('disables Generate and shows a wait message while the request is in flight', async () => {
-    let resolve!: (v: { imageUrl: string }) => void
+    let resolve!: (v: { imageUrls: string[] }) => void
     m.tryOn.mockReturnValue(new Promise((r) => (resolve = r)))
     const user = userEvent.setup()
     render(<PhotoTryOn />)
@@ -87,7 +87,7 @@ describe('PhotoTryOn', () => {
     await user.click(screen.getByRole('button', { name: 'Generate' }))
     expect(await screen.findByRole('button', { name: 'Generating…' })).toBeDisabled()
     expect(screen.getByText(/20.*40 seconds/)).toBeInTheDocument()
-    resolve({ imageUrl: 'https://example.com/r.png' })
+    resolve({ imageUrls: ['https://example.com/r.png'] })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeEnabled())
   })
 

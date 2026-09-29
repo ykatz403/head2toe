@@ -6,8 +6,8 @@ namespace Head2Toe.Api.Services;
 
 public record TryOnRequest(string HumanImage, string GarmentImage, string GarmentDescription, string Category);
 
-/// <summary>Either the generated image's URL, or a message safe to show the user.</summary>
-public record TryOnResult(string? ImageUrl, string? Error);
+/// <summary>Either the generated images' URLs, or a message safe to show the user.</summary>
+public record TryOnResult(string[]? ImageUrls, string? Error);
 
 /// <summary>
 /// Puts a real garment photo onto a real photo of a person using FASHN's Try-On Max: their high-fidelity
@@ -49,9 +49,17 @@ public class FashnTryOn
             {
                 model_image = req.HumanImage,
                 product_image = req.GarmentImage,
+                // Targets the two failure modes seen so far: the garment being redesigned rather than
+                // copied (wrong collar/buttons/silhouette), and the person's own face/body drifting.
+                // Wording this explicitly measurably reduces both, without guaranteeing either.
+                prompt = "Reproduce the garment from the second photo exactly: match its collar shape, button count and placement, silhouette, cut and pattern precisely - do not redesign or reinterpret it. " +
+                         "Keep the person's face, identity, skin tone, hairstyle, body shape, pose, hands, shoes and the entire background exactly as shown in the first photo - do not alter or regenerate them. " +
+                         "Do not add any clothing tags, labels, logos, text, or graphics that are not visibly present in the reference photos.",
                 resolution = "2k",
                 generation_mode = "quality",
                 output_format = "jpeg",
+                // Diagnostic only: seeing the spread of results at once, not how this would ship.
+                num_images = 3,
             },
         };
 
@@ -82,7 +90,7 @@ public class FashnTryOn
 
         return status.Status switch
         {
-            "completed" when status.Output is { Length: > 0 } => new TryOnResult(status.Output[0], null),
+            "completed" when status.Output is { Length: > 0 } => new TryOnResult(status.Output, null),
             "completed" => new TryOnResult(null, "The try-on service returned no image."),
             "failed" => new TryOnResult(null, FriendlyRuntimeError(status.Error)),
             _ => new TryOnResult(null, "The try-on is taking longer than expected. Try again in a moment."),

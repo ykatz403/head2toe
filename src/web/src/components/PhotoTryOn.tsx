@@ -18,7 +18,7 @@ export function PhotoTryOn() {
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [resultUrl, setResultUrl] = useState<string | null>(null)
+  const [resultUrls, setResultUrls] = useState<string[]>([])
   const [configured, setConfigured] = useState<boolean | null>(null)
 
   const personInput = useRef<HTMLInputElement>(null)
@@ -47,7 +47,7 @@ export function PhotoTryOn() {
     personFile.current = file
     setPersonUrl((old) => (old && URL.revokeObjectURL(old), URL.createObjectURL(file)))
     setPersonStatus('ready')
-    setResultUrl(null)
+    setResultUrls([])
     setError('')
     await photoStore.set(file)
   }
@@ -55,32 +55,32 @@ export function PhotoTryOn() {
     await photoStore.clear()
     setPersonUrl((old) => (old && URL.revokeObjectURL(old), null))
     personFile.current = null
-    setResultUrl(null)
+    setResultUrls([])
     setPersonStatus('empty')
   }
   const chooseGarment = (file: File | undefined) => {
     if (!file) return
     garmentFile.current = file
     setGarmentUrl((old) => (old && URL.revokeObjectURL(old), URL.createObjectURL(file)))
-    setResultUrl(null)
+    setResultUrls([])
     setError('')
   }
   const removeGarment = () => {
     setGarmentUrl((old) => (old && URL.revokeObjectURL(old), null))
     garmentFile.current = null
-    setResultUrl(null)
+    setResultUrls([])
   }
 
   const generate = async () => {
     if (!personFile.current || !garmentFile.current) return
     setBusy(true)
     setError('')
-    setResultUrl(null)
+    setResultUrls([])
     try {
       // A higher cap than the default: fine patterns hold up better with more source detail to work from.
       const [humanImage, garmentImage] = await Promise.all([toDataUri(personFile.current, 1600), toDataUri(garmentFile.current, 1600)])
       const res = await api.tryOn(humanImage, garmentImage, description, category)
-      setResultUrl(res.imageUrl)
+      setResultUrls(res.imageUrls)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Something went wrong generating that. Try again.')
     } finally {
@@ -88,11 +88,10 @@ export function PhotoTryOn() {
     }
   }
 
-  const download = () => {
-    if (!resultUrl) return
+  const download = (url: string, i: number) => {
     const a = document.createElement('a')
-    a.href = resultUrl
-    a.download = 'head2toe-tryon.png'
+    a.href = url
+    a.download = `head2toe-tryon-${i + 1}.png`
     a.target = '_blank'
     a.rel = 'noopener'
     a.click()
@@ -178,12 +177,18 @@ export function PhotoTryOn() {
 
       {error && <p className="err" role="alert">{error}</p>}
 
-      {resultUrl && (
+      {resultUrls.length > 0 && (
         <div className="tryon-result">
-          <span className="eyebrow">Result</span>
-          <img className="tryon-img large" src={resultUrl} alt="You wearing the garment" />
-          <div className="photo-bar static">
-            <button className="btn sm" type="button" onClick={download}>Save image</button>
+          <span className="eyebrow">Result — {resultUrls.length} variations of the same photos, diagnostic only</span>
+          <div className="tryon-result-grid">
+            {resultUrls.map((url, i) => (
+              <div key={url} className="tryon-result-item">
+                <img className="tryon-img large" src={url} alt={`You wearing the garment, variation ${i + 1}`} />
+                <div className="photo-bar static">
+                  <button className="btn sm" type="button" onClick={() => download(url, i)}>Save image</button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -191,6 +196,7 @@ export function PhotoTryOn() {
       <p className="fine tryon-note">
         This generates one garment at a time (top, bottom, or dress) using a real AI model — it doesn't yet cover hats, shoes, glasses or a full outfit in one image.
         Your photo is sent only to the try-on service when you click Generate, never stored on our server.
+        Multiple results per click is a temporary way to see the model's range — production would generate one.
       </p>
     </div>
   )

@@ -167,7 +167,7 @@ tryon.MapPost("", async (TryOnRequest req, FashnTryOn r, CancellationToken ct) =
     if (string.IsNullOrWhiteSpace(req.HumanImage) || string.IsNullOrWhiteSpace(req.GarmentImage))
         return Results.BadRequest(new { error = "Both a photo of you and a photo of the garment are required." });
     var result = await r.GenerateAsync(req, ct);
-    return result.ImageUrl is not null ? Results.Ok(new { imageUrl = result.ImageUrl }) : Results.UnprocessableEntity(new { error = result.Error });
+    return result.ImageUrls is not null ? Results.Ok(new { imageUrls = result.ImageUrls }) : Results.UnprocessableEntity(new { error = result.Error });
 });
 
 // Unknown API routes are real 404s (JSON), never the web page. Everything else falls back to the React app.

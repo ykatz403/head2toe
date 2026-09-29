@@ -17,6 +17,8 @@ builder.Configuration.AddEnvironmentVariables();
 // convention AddEnvironmentVariables expects, so it's bridged in explicitly.
 if (Environment.GetEnvironmentVariable("FASHN_API_TOKEN") is { Length: > 0 } fashnToken)
     builder.Configuration["Fashn:ApiToken"] = fashnToken;
+if (Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") is { Length: > 0 } anthropicKey)
+    builder.Configuration["Anthropic:ApiKey"] = anthropicKey;
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is not set.");
 if (!builder.Environment.IsDevelopment() && jwtKey.StartsWith("DEV-ONLY"))
@@ -50,8 +52,19 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy("tryon", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("RateLimit:TryOnPerMinute", 4), Window = TimeSpan.FromMinutes(1) }));
+    // Each search holds a real browser page open for several seconds; capped to protect the one shared browser instance.
+    o.AddPolicy("scrape", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 6, Window = TimeSpan.FromMinutes(1) }));
+    // Free-text style search costs one small Claude call per request; looser than the scrape/tryon limits.
+    o.AddPolicy("search", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 15, Window = TimeSpan.FromMinutes(1) }));
 });
 builder.Services.AddHttpClient<FashnTryOn>(c => c.Timeout = TimeSpan.FromSeconds(100));
+builder.Services.AddHttpClient<PreferencePicker>(c => c.Timeout = TimeSpan.FromSeconds(30));
+// Singleton: launches one real browser once and reuses it across searches, rather than starting a new one per request.
+builder.Services.AddSingleton<NordstromScraper>();
 // Photos travel as base64 JSON; give the request body enough room for two photos plus JSON overhead.
 builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(o => o.Limits.MaxRequestBodySize = 30 * 1024 * 1024);
 
@@ -64,6 +77,12 @@ using (var scope = app.Services.CreateScope())
     if (!db.Products.Any())
     {
         db.Products.AddRange(Seed.Catalog());
+        db.SaveChanges();
+    }
+    // Real-photo seed catalog, marked Season="all" so it never collides with the existing outfit-slot catalog above.
+    if (!db.Products.Any(p => p.Season == "all"))
+    {
+        db.Products.AddRange(RealProductSeed.Catalog());
         db.SaveChanges();
     }
 }
@@ -170,6 +189,74 @@ tryon.MapPost("", async (TryOnRequest req, FashnTryOn r, CancellationToken ct) =
     return result.ImageUrls is not null ? Results.Ok(new { imageUrls = result.ImageUrls }) : Results.UnprocessableEntity(new { error = result.Error });
 });
 
+// ---- real product search: pulls live results (name, price, photo, link) from Nordstrom ----
+// POC only: production should replace this with a licensed affiliate feed (Awin, Rakuten) instead of scraping.
+var products = api.MapGroup("/products").RequireRateLimiting("scrape");
+products.MapGet("/search", async (string? q, NordstromScraper scraper, ILogger<Program> log, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(q)) return Results.BadRequest(new { error = "Query parameter 'q' is required." });
+    try
+    {
+        var results = await scraper.SearchAsync(q, 12, ct);
+        return results.Count > 0
+            ? Results.Ok(new { query = q, results })
+            : Results.UnprocessableEntity(new { error = "No results came back for that search. Try different words, or try again." });
+    }
+    catch (Exception ex)
+    {
+        log.LogWarning(ex, "Product search failed for {Query}", q);
+        return Results.UnprocessableEntity(new { error = "The search took too long or the site didn't respond as expected. Try again." });
+    }
+});
+
+// ---- style search: free-text description -> best-matching real item(s) from the seed catalog ----
+// Interim stand-in for a licensed affiliate feed: Claude picks from a small, hand-gathered real-photo
+// catalog (see RealProductSeed) rather than anything scraped or invented.
+products.MapPost("/find", async (FindRequest req, PreferencePicker picker, AppDb db, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Description)) return Results.BadRequest(new { error = "Describe what you're looking for." });
+    var catalogQuery = db.Products.AsNoTracking().Where(p => p.Season == "all");
+    if (!string.IsNullOrWhiteSpace(req.Slot)) catalogQuery = catalogQuery.Where(p => p.Slot == req.Slot);
+    var catalog = await catalogQuery.ToListAsync(ct);
+    var (picks, error) = await picker.PickAsync(req.Description, catalog, ct);
+    if (picks is null) return Results.UnprocessableEntity(new { error });
+    var byId = catalog.ToDictionary(p => p.Id);
+    var items = picks.Select(pick =>
+    {
+        var p = byId[pick.Id];
+        string? image = null;
+        if (p.AttrsJson is { Length: > 0 })
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(p.AttrsJson);
+            if (doc.RootElement.TryGetProperty("realImage", out var img)) image = img.GetString();
+        }
+        return new { id = p.Id, slot = p.Slot, name = p.Name, brand = p.Brand, price = p.Price, url = p.Url, image, reason = pick.Reason };
+    });
+    return Results.Ok(new { query = req.Description, results = items });
+}).RequireRateLimiting("search");
+
+// ---- image proxy: fetches a seed-catalog product photo server-side so the browser never needs ----
+// cross-origin access to the retailer's CDN. Locked to the exact hosts RealProductSeed actually uses.
+var allowedImageHosts = new HashSet<string> { "cdn.shopify.com", "www.allbirds.com" };
+products.MapGet("/image", async (string url, IHttpClientFactory httpFactory, CancellationToken ct) =>
+{
+    if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !allowedImageHosts.Contains(uri.Host))
+        return Results.BadRequest(new { error = "That image source isn't allowed." });
+    using var client = httpFactory.CreateClient();
+    HttpResponseMessage res;
+    try
+    {
+        res = await client.GetAsync(uri, ct);
+    }
+    catch (HttpRequestException)
+    {
+        return Results.UnprocessableEntity(new { error = "Could not fetch that image." });
+    }
+    if (!res.IsSuccessStatusCode) return Results.UnprocessableEntity(new { error = "Could not fetch that image." });
+    var bytes = await res.Content.ReadAsByteArrayAsync(ct);
+    return Results.File(bytes, res.Content.Headers.ContentType?.MediaType ?? "image/jpeg");
+}).RequireRateLimiting("search");
+
 // Unknown API routes are real 404s (JSON), never the web page. Everything else falls back to the React app.
 app.MapFallback("/api/{**path}", () => Results.NotFound(new { error = "Not found." }));
 app.MapFallbackToFile("index.html");
@@ -179,5 +266,6 @@ record Credentials(string? Email, string? Password);
 record AuthResponse(string Token, string Email);
 record ScanInput(int HeightCm, int BuildPct, int SkinTone);
 record ScanDto(int HeightCm, int BuildPct, int SkinTone, DateTime CreatedAt);
+record FindRequest(string? Description, string? Slot);
 
 public partial class Program;

@@ -33,3 +33,6 @@ test-results/
 playwright-report/
 e2e-run.txt
 coverage/
+
+# Throwaway scratch scripts, not part of the app
+src/api/pwtest/

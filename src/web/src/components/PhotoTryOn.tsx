@@ -1,20 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, ApiError } from '../lib/api'
+import { api, ApiError, type ProductMatch } from '../lib/api'
 import { toDataUri } from '../lib/imageResize'
 import { photoStore } from '../lib/photoStore'
 
 type PersonStatus = 'loading' | 'empty' | 'ready'
+type GarmentMode = 'upload' | 'search'
 const CATEGORIES = [['upper_body', 'Top (shirt, sweater, jacket)'], ['lower_body', 'Bottoms (pants, shorts, skirt)'], ['dresses', 'Dress']] as const
+// Only these two slots map to a try-on category the model supports; shoes show up to shop but can't be tried on yet.
+const SLOT_CATEGORY: Record<string, string> = { shirt: 'upper_body', jacket: 'upper_body', pants: 'lower_body' }
 
 export function PhotoTryOn() {
   const [personStatus, setPersonStatus] = useState<PersonStatus>('loading')
   const [personUrl, setPersonUrl] = useState<string | null>(null)
   const personFile = useRef<Blob | null>(null)
 
+  const [garmentMode, setGarmentMode] = useState<GarmentMode>('upload')
   const [garmentUrl, setGarmentUrl] = useState<string | null>(null)
-  const garmentFile = useRef<File | null>(null)
+  const garmentFile = useRef<Blob | null>(null)
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<string>(CATEGORIES[0][0])
+
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const [matches, setMatches] = useState<ProductMatch[]>([])
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [changingId, setChangingId] = useState<number | null>(null)
+  const [changeText, setChangeText] = useState('')
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -69,6 +81,75 @@ export function PhotoTryOn() {
     setGarmentUrl((old) => (old && URL.revokeObjectURL(old), null))
     garmentFile.current = null
     setResultUrls([])
+  }
+
+  const switchGarmentMode = (mode: GarmentMode) => {
+    setGarmentMode(mode)
+    removeGarment()
+    setMatches([])
+    setSelectedId(null)
+    setSearchError('')
+  }
+
+  const runSearch = async () => {
+    if (!query.trim()) return
+    setSearching(true)
+    setSearchError('')
+    setMatches([])
+    setSelectedId(null)
+    try {
+      const res = await api.findProducts(query)
+      setMatches(res.results)
+      if (res.results.length === 0) setSearchError("Nothing matched that. Try describing it differently.")
+    } catch (e) {
+      setSearchError(e instanceof ApiError ? e.message : 'Something went wrong searching. Try again.')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const useMatch = async (item: ProductMatch) => {
+    if (!item.image) return
+    setSearchError('')
+    try {
+      const blob = await api.fetchProductImage(item.image)
+      garmentFile.current = blob
+      setGarmentUrl((old) => (old && URL.revokeObjectURL(old), URL.createObjectURL(blob)))
+      setResultUrls([])
+      setError('')
+      setSelectedId(item.id)
+      setDescription(`${item.brand} ${item.name}`)
+      const cat = SLOT_CATEGORY[item.slot]
+      if (cat) setCategory(cat)
+    } catch (e) {
+      setSearchError(e instanceof ApiError ? e.message : 'Could not load that product photo. Try again.')
+    }
+  }
+
+  const startChange = (item: ProductMatch) => {
+    setChangingId(item.id)
+    setChangeText('')
+  }
+
+  const submitChange = async (item: ProductMatch) => {
+    if (!changeText.trim()) return
+    setSearching(true)
+    setSearchError('')
+    try {
+      const res = await api.findProducts(changeText, item.slot)
+      const replacement = res.results[0]
+      if (replacement) {
+        setMatches((old) => old.map((m) => (m.id === item.id ? replacement : m)))
+        if (selectedId === item.id) await useMatch(replacement)
+      } else {
+        setSearchError("Nothing matched that for this item. Try describing it differently.")
+      }
+    } catch (e) {
+      setSearchError(e instanceof ApiError ? e.message : 'Something went wrong. Try again.')
+    } finally {
+      setSearching(false)
+      setChangingId(null)
+    }
   }
 
   const generate = async () => {
@@ -134,22 +215,117 @@ export function PhotoTryOn() {
 
         <div className="tryon-col">
           <span className="eyebrow">2 · The garment</span>
-          <div className="photo-stage small">
-            {!garmentUrl ? (
-              <div className="upload">
-                <p className="fine">A clear product photo of one item: a shirt, a pair of pants, a dress. Flat-lay or on a mannequin works best.</p>
-                <button className="btn primary" type="button" onClick={() => garmentInput.current?.click()}>Choose a garment photo</button>
-              </div>
-            ) : (
-              <>
-                <img className="tryon-img" src={garmentUrl} alt="Garment" />
-                <div className="photo-bar">
-                  <button className="btn sm" type="button" onClick={() => garmentInput.current?.click()}>Change</button>
-                  <button className="btn sm" type="button" onClick={removeGarment}>Remove</button>
-                </div>
-              </>
-            )}
+          <div className="mode-toggle" role="group" aria-label="How to pick a garment">
+            <button className="btn sm" type="button" aria-pressed={garmentMode === 'upload'} onClick={() => switchGarmentMode('upload')}>Upload a photo</button>
+            <button className="btn sm" type="button" aria-pressed={garmentMode === 'search'} onClick={() => switchGarmentMode('search')}>Describe what you want</button>
           </div>
+
+          {garmentMode === 'upload' && (
+            <div className="photo-stage small">
+              {!garmentUrl ? (
+                <div className="upload">
+                  <p className="fine">A clear product photo of one item: a shirt, a pair of pants, a dress. Flat-lay or on a mannequin works best.</p>
+                  <button className="btn primary" type="button" onClick={() => garmentInput.current?.click()}>Choose a garment photo</button>
+                </div>
+              ) : (
+                <>
+                  <img className="tryon-img" src={garmentUrl} alt="Garment" />
+                  <div className="photo-bar">
+                    <button className="btn sm" type="button" onClick={() => garmentInput.current?.click()}>Change</button>
+                    <button className="btn sm" type="button" onClick={removeGarment}>Remove</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {garmentMode === 'search' && (
+            <>
+              <div className="photo-stage small">
+                {!garmentUrl ? (
+                  <div className="upload">
+                    <p className="fine">Describe what you're looking for — e.g. "a casual corduroy shirt for fall". We'll find a real matching item below.</p>
+                    <div className="tryon-fields" style={{ width: '100%' }}>
+                      <input
+                        className="num"
+                        type="text"
+                        placeholder="What are you looking for?"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && void runSearch()}
+                      />
+                    </div>
+                    <button className="btn primary" type="button" disabled={searching || !query.trim()} onClick={() => void runSearch()}>
+                      {searching ? 'Searching…' : 'Find items'}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <img className="tryon-img" src={garmentUrl} alt="Selected garment" />
+                    <div className="photo-bar">
+                      <button className="btn sm" type="button" onClick={removeGarment}>Clear selection</button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {searchError && <p className="err" role="alert">{searchError}</p>}
+
+              {matches.length > 0 && (
+                <aside className="panel" aria-label="Matching items">
+                  <div className="panel-head">
+                    <h3>Matches</h3>
+                    <span className="eyebrow">{matches.length} found</span>
+                  </div>
+                  <ul className="outfit">
+                    {matches.map((m) => (
+                      <li key={m.id}>
+                        <span className="sw">{m.image && <img src={m.image} alt="" />}</span>
+                        <div>
+                          <div className="slot">{m.slot}</div>
+                          <div className="nm">{m.name}</div>
+                          <div className="br">{m.brand} · ${m.price.toFixed(2)}</div>
+                        </div>
+                        <div className="right">
+                          <div className="acts">
+                            {SLOT_CATEGORY[m.slot] && (
+                              <button className="btn sm" type="button" aria-pressed={selectedId === m.id} onClick={() => void useMatch(m)}>
+                                {selectedId === m.id ? 'Selected' : 'Use'}
+                              </button>
+                            )}
+                            <button className="btn sm" type="button" onClick={() => startChange(m)}>Change</button>
+                            <a className="shop" href={m.url} target="_blank" rel="noopener sponsored">Shop ↗</a>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {changingId !== null && (
+                    <div className="change-row">
+                      <input
+                        className="num"
+                        type="text"
+                        placeholder="Describe a replacement…"
+                        value={changeText}
+                        onChange={(e) => setChangeText(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && void submitChange(matches.find((m) => m.id === changingId)!)}
+                      />
+                      <button
+                        className="btn sm primary"
+                        type="button"
+                        disabled={searching || !changeText.trim()}
+                        onClick={() => void submitChange(matches.find((m) => m.id === changingId)!)}
+                      >
+                        Find
+                      </button>
+                      <button className="btn sm" type="button" onClick={() => setChangingId(null)}>Cancel</button>
+                    </div>
+                  )}
+                </aside>
+              )}
+            </>
+          )}
+
           <div className="tryon-fields">
             <div className="slider">
               <label htmlFor="garment-desc">Description</label>
@@ -170,14 +346,24 @@ export function PhotoTryOn() {
 
       <div className="tryon-actions">
         <button className="btn primary" type="button" disabled={busy || !personUrl || !garmentUrl || configured === false} onClick={() => void generate()}>
+          {busy && <span className="spinner" aria-hidden="true" />}
           {busy ? 'Generating…' : 'Generate'}
         </button>
-        {busy && <p className="fine" role="status">This calls a real AI model and usually takes 10–20 seconds.</p>}
       </div>
 
       {error && <p className="err" role="alert">{error}</p>}
 
-      {resultUrls.length > 0 && (
+      {busy && (
+        <div className="tryon-result">
+          <span className="eyebrow">Generating…</span>
+          <div className="tryon-loading" role="status">
+            <span className="spinner large" aria-hidden="true" />
+            <p className="fine">This calls a real AI model and usually takes 10–20 seconds.</p>
+          </div>
+        </div>
+      )}
+
+      {!busy && resultUrls.length > 0 && (
         <div className="tryon-result">
           <span className="eyebrow">Result — {resultUrls.length} variations of the same photos, diagnostic only</span>
           <div className="tryon-result-grid">

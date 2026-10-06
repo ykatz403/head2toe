@@ -36,3 +36,6 @@ coverage/
 
 # Throwaway scratch scripts, not part of the app
 src/api/pwtest/
+
+# Local publish output
+src/api/publish/

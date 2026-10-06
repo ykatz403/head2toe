@@ -98,7 +98,8 @@ public class FashnTryOn
         }
         if (run.Error is not null) return new TryOnResult(null, run.Error);
 
-        var deadline = DateTime.UtcNow.AddSeconds(60);
+        // Quality mode at 2K with several images can run well past a minute while FASHN's queue is busy.
+        var deadline = DateTime.UtcNow.AddSeconds(180);
         StatusResponse status;
         do
         {
@@ -129,6 +130,8 @@ public class FashnTryOn
     {
         var text = await res.Content.ReadAsStringAsync(ct);
         _log.LogWarning("FASHN rejected the request: {Status} {Body}", res.StatusCode, text);
+        // FASHN reports an empty account as 429 with an OutOfCredits body, not 402, so check the body first.
+        if (text.Contains("OutOfCredits")) return new TryOnResult(null, "The try-on account has run out of credits. Top up at fashn.ai and try again.");
         return new TryOnResult(null, res.StatusCode switch
         {
             System.Net.HttpStatusCode.Unauthorized => "The try-on service rejected our API token.",

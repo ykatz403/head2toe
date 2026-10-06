@@ -4,7 +4,7 @@
     {
       "name": "head2toe-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "dev", "--prefix", "src/web"],
       "port": 5173
     }
   ]

@@ -1,0 +1,11 @@
+**/bin
+**/obj
+**/node_modules
+**/wwwroot
+**/.vs
+src/api/pwtest
+src/api/*.db*
+src/api/.env
+.git
+.claude
+prototype

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { api, ApiError, type ProductMatch } from '../lib/api'
 import { toDataUri } from '../lib/imageResize'
+import { useModal } from '../lib/useModal'
 import { photoStore } from '../lib/photoStore'
 
 type PersonStatus = 'loading' | 'empty' | 'ready'
@@ -20,12 +21,52 @@ interface Props {
   sidePanelSlot?: HTMLElement | null
 }
 
+function download(url: string, i: number) {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `head2toe-tryon-${i + 1}.png`
+  a.target = '_blank'
+  a.rel = 'noopener'
+  a.click()
+}
+
+/** Full-screen image viewer, reused for the main result and for the hidden variations gallery. */
+function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: number; onClose: () => void }) {
+  const [i, setI] = useState(startIndex)
+  const ref = useModal<HTMLDivElement>(onClose)
+  const url = urls[i]
+  return (
+    <div className="modal lightbox" role="dialog" aria-modal="true" aria-label="Full-size result" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="lightbox-sheet" ref={ref}>
+        <div className="sheet-head">
+          <span className="eyebrow">{urls.length > 1 ? `Variation ${i + 1} of ${urls.length}` : 'Result'}</span>
+          <button className="btn sm" type="button" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <img className="lightbox-img" src={url} alt={`You wearing the garment, variation ${i + 1}`} />
+        <div className="actions">
+          {urls.length > 1 && (
+            <div className="acts">
+              {urls.map((u, idx) => (
+                <button key={u} className="btn sm" type="button" aria-pressed={idx === i} onClick={() => setI(idx)}>{idx + 1}</button>
+              ))}
+            </div>
+          )}
+          <button className="btn primary sm" type="button" onClick={() => download(url, i)}>Download</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function PhotoTryOn({ sidePanelSlot }: Props) {
   const [personStatus, setPersonStatus] = useState<PersonStatus>('loading')
   const [personUrl, setPersonUrl] = useState<string | null>(null)
   const personFile = useRef<Blob | null>(null)
 
-  const [garmentMode, setGarmentMode] = useState<GarmentMode>('upload')
+  // Upload mode is a hidden tester-only path (see the faint "·" control at the bottom of the page):
+  // normal visitors only ever see the free-text search flow.
+  const [testMode, setTestMode] = useState(false)
+  const [garmentMode, setGarmentMode] = useState<GarmentMode>('search')
   const [garmentUrl, setGarmentUrl] = useState<string | null>(null)
   const garmentFile = useRef<Blob | null>(null)
   const [description, setDescription] = useState('')
@@ -44,6 +85,9 @@ export function PhotoTryOn({ sidePanelSlot }: Props) {
   const [progressLabel, setProgressLabel] = useState('')
   const [error, setError] = useState('')
   const [resultUrls, setResultUrls] = useState<string[]>([])
+  // Separate from resultUrls on purpose: the normal "Expand" click only ever opens the one visible
+  // image (no hint that others exist), while the hidden "other variations" control opens all of them.
+  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number } | null>(null)
   const [configured, setConfigured] = useState<boolean | null>(null)
 
   const personInput = useRef<HTMLInputElement>(null)
@@ -204,15 +248,6 @@ export function PhotoTryOn({ sidePanelSlot }: Props) {
     }
   }
 
-  const download = (url: string, i: number) => {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `head2toe-tryon-${i + 1}.png`
-    a.target = '_blank'
-    a.rel = 'noopener'
-    a.click()
-  }
-
   const personInputEl = <input id="tryon-person" ref={personInput} type="file" accept="image/*" hidden onChange={(e) => { void choosePerson(e.target.files?.[0]); e.target.value = '' }} />
   const garmentInputEl = <input id="tryon-garment" ref={garmentInput} type="file" accept="image/*" hidden onChange={(e) => { chooseGarment(e.target.files?.[0]); e.target.value = '' }} />
 
@@ -313,12 +348,15 @@ export function PhotoTryOn({ sidePanelSlot }: Props) {
 
         <div className="tryon-col">
           <span className="eyebrow">2 · The garment</span>
-          <div className="mode-toggle" role="group" aria-label="How to pick a garment">
-            <button className="btn sm" type="button" aria-pressed={garmentMode === 'upload'} onClick={() => switchGarmentMode('upload')}>Upload a photo</button>
-            <button className="btn sm" type="button" aria-pressed={garmentMode === 'search'} onClick={() => switchGarmentMode('search')}>Describe what you want</button>
-          </div>
 
-          {garmentMode === 'upload' && (
+          {testMode && (
+            <div className="mode-toggle" role="group" aria-label="How to pick a garment">
+              <button className="btn sm" type="button" aria-pressed={garmentMode === 'upload'} onClick={() => switchGarmentMode('upload')}>Upload a photo</button>
+              <button className="btn sm" type="button" aria-pressed={garmentMode === 'search'} onClick={() => switchGarmentMode('search')}>Describe what you want</button>
+            </div>
+          )}
+
+          {testMode && garmentMode === 'upload' && (
             <div className="photo-stage small">
               {!garmentUrl ? (
                 <div className="upload">
@@ -371,7 +409,7 @@ export function PhotoTryOn({ sidePanelSlot }: Props) {
 
           {searchError && <p className="err" role="alert">{searchError}</p>}
 
-          {garmentMode === 'upload' && (
+          {testMode && garmentMode === 'upload' && (
             <div className="tryon-fields">
               <div className="slider">
                 <label htmlFor="garment-desc">Description</label>
@@ -402,7 +440,6 @@ export function PhotoTryOn({ sidePanelSlot }: Props) {
 
       {busy && (
         <div className="tryon-result">
-          <span className="eyebrow">Generating…</span>
           <div className="tryon-loading" role="status">
             <span className="spinner large" aria-hidden="true" />
             <p className="fine">{progressLabel || 'This calls a real AI model and usually takes 10–20 seconds.'}</p>
@@ -412,16 +449,15 @@ export function PhotoTryOn({ sidePanelSlot }: Props) {
 
       {!busy && resultUrls.length > 0 && (
         <div className="tryon-result">
-          <span className="eyebrow">Result — {resultUrls.length} variations of the same photos, diagnostic only</span>
-          <div className="tryon-result-grid">
-            {resultUrls.map((url, i) => (
-              <div key={url} className="tryon-result-item">
-                <img className="tryon-img large" src={url} alt={`You wearing the garment, variation ${i + 1}`} />
-                <div className="photo-bar static">
-                  <button className="btn sm" type="button" onClick={() => download(url, i)}>Save image</button>
-                </div>
+          <span className="eyebrow">Result</span>
+          <div className="result-card">
+            <div className="result-stage">
+              <img className="result-img" src={resultUrls[0]} alt="You wearing the garment" />
+              <div className="result-overlay">
+                <button className="btn sm" type="button" onClick={() => setLightbox({ urls: [resultUrls[0]], index: 0 })}>⤢ Expand</button>
+                <button className="btn sm" type="button" onClick={() => download(resultUrls[0], 0)}>⬇ Download</button>
               </div>
-            ))}
+            </div>
           </div>
         </div>
       )}
@@ -429,8 +465,16 @@ export function PhotoTryOn({ sidePanelSlot }: Props) {
       <p className="fine tryon-note">
         Adding more than one item (e.g. a jacket and shoes) runs one AI call per item, layering each onto the previous result — it takes longer and costs more per generation than a single item.
         Your photo is sent only to the try-on service when you click Generate, never stored on our server.
-        Multiple results per click is a temporary way to see the model's range — production would generate one.
       </p>
+
+      <div className="hidden-row">
+        {resultUrls.length > 1 && (
+          <button className="secret-dot" type="button" onClick={() => setLightbox({ urls: resultUrls, index: 1 })} aria-label="Other variations">·</button>
+        )}
+        <button className="secret-dot" type="button" onClick={() => setTestMode((v) => !v)} aria-label="Toggle advanced mode">·</button>
+      </div>
+
+      {lightbox && createPortal(<Lightbox urls={lightbox.urls} startIndex={lightbox.index} onClose={() => setLightbox(null)} />, document.body)}
 
       {sidePanelSlot ? createPortal(matchesPanel, sidePanelSlot) : matchesPanel}
     </div>
